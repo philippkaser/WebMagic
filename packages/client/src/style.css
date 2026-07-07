@@ -1,0 +1,210 @@
+:root {
+  --ui-bg: rgba(12, 10, 16, 0.82);
+  --ui-border: #4a3c2a;
+  --ui-gold: #d8b45a;
+  --ui-text: #e8ddc8;
+  --hp: #c03a2b;
+  --mp: #2b6cc0;
+  --xp: #8a63d2;
+  font-family: 'Courier New', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #app { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+canvas.game {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.overlay { position: absolute; inset: 0; pointer-events: none; color: var(--ui-text); }
+
+/* ---------- login ---------- */
+.login {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, #1a1424 0%, #050308 75%);
+  color: var(--ui-text); gap: 24px; pointer-events: auto;
+}
+.login h1 {
+  font-size: 52px; letter-spacing: 8px; color: var(--ui-gold);
+  text-shadow: 0 0 24px #d8b45a55, 3px 3px 0 #000;
+}
+.login .tagline { color: #9a8f7a; margin-top: -16px; }
+.login input {
+  background: #0d0a12; border: 2px solid var(--ui-border); color: var(--ui-text);
+  padding: 10px 16px; font-size: 18px; font-family: inherit; text-align: center; width: 280px;
+}
+.login input:focus { outline: none; border-color: var(--ui-gold); }
+.classes { display: flex; gap: 16px; }
+.class-card {
+  width: 180px; padding: 16px; border: 2px solid var(--ui-border); background: var(--ui-bg);
+  cursor: pointer; text-align: center; transition: border-color .15s, transform .15s;
+}
+.class-card:hover { transform: translateY(-4px); }
+.class-card.selected { border-color: var(--ui-gold); box-shadow: 0 0 18px #d8b45a44; }
+.class-card h3 { color: var(--ui-gold); margin-bottom: 8px; }
+.class-card p { font-size: 12px; color: #9a8f7a; line-height: 1.5; }
+.class-card .icon { font-size: 40px; margin-bottom: 8px; }
+.login button {
+  background: #2a2033; border: 2px solid var(--ui-gold); color: var(--ui-gold);
+  font-size: 20px; font-family: inherit; padding: 12px 48px; cursor: pointer; letter-spacing: 4px;
+}
+.login button:hover { background: #3a2d47; }
+.login .error { color: #e05545; min-height: 20px; }
+
+/* ---------- HUD ---------- */
+.hud-bottom {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: flex-end; justify-content: center; gap: 14px; padding: 12px;
+}
+.orb {
+  width: 84px; height: 84px; border-radius: 50%; border: 3px solid var(--ui-border);
+  position: relative; overflow: hidden; background: #0a0810;
+}
+.orb .fill { position: absolute; bottom: 0; left: 0; right: 0; transition: height .2s; }
+.orb.hp .fill { background: radial-gradient(circle at 30% 30%, #e0604f, var(--hp)); }
+.orb.mp .fill { background: radial-gradient(circle at 30% 30%, #5a92e0, var(--mp)); }
+.orb .label {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: bold; text-shadow: 1px 1px 0 #000; z-index: 1;
+}
+.center-hud { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.xpbar { width: 320px; height: 10px; background: #0a0810; border: 2px solid var(--ui-border); }
+.xpbar .fill { height: 100%; background: var(--xp); transition: width .3s; }
+.skills { display: flex; gap: 6px; }
+.skill {
+  width: 52px; height: 52px; border: 2px solid var(--ui-border); background: var(--ui-bg);
+  position: relative; display: flex; align-items: center; justify-content: center;
+  font-size: 24px; pointer-events: auto; cursor: pointer;
+}
+.skill .key {
+  position: absolute; top: 1px; left: 3px; font-size: 10px; color: var(--ui-gold);
+}
+.skill .cd {
+  position: absolute; inset: 0; background: rgba(0,0,0,.75);
+  display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff;
+}
+.skill.locked { opacity: .35; }
+.level-badge {
+  font-size: 12px; color: var(--ui-gold); text-shadow: 1px 1px 0 #000;
+}
+
+/* ---------- top bars ---------- */
+.hud-top {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  text-align: center; text-shadow: 1px 1px 0 #000;
+}
+.zone-name { color: var(--ui-gold); font-size: 15px; letter-spacing: 2px; }
+.zone-sub { color: #9a8f7a; font-size: 11px; }
+
+.interact-prompt {
+  position: absolute; bottom: 30%; left: 50%; transform: translateX(-50%);
+  background: var(--ui-bg); border: 1px solid var(--ui-gold); padding: 6px 16px;
+  font-size: 14px; color: var(--ui-gold);
+}
+
+.crosshair {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: #ffffff88; font-size: 16px; text-shadow: 1px 1px 0 #000;
+}
+
+/* ---------- chat ---------- */
+.chat {
+  position: absolute; left: 12px; bottom: 12px; width: 380px; pointer-events: auto;
+}
+.chat-log {
+  max-height: 180px; overflow-y: auto; font-size: 12px; line-height: 1.5;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  mask-image: linear-gradient(to bottom, transparent, black 20%);
+}
+.chat-log div { text-shadow: 1px 1px 0 #000; word-wrap: break-word; }
+.chat-log .ch-global .from { color: #e8b74a; }
+.chat-log .ch-local .from { color: #7ec87e; }
+.chat-log .ch-system { color: #8a9cc8; font-style: italic; }
+.chat-log .notice-info { color: #b8ac92; }
+.chat-log .notice-warn { color: #e05545; }
+.chat-log .notice-loot { color: #d8b45a; }
+.chat-input {
+  display: none; width: 100%; margin-top: 4px; background: var(--ui-bg);
+  border: 1px solid var(--ui-border); color: var(--ui-text);
+  font-family: inherit; font-size: 13px; padding: 6px 8px;
+}
+.chat-input:focus { outline: none; border-color: var(--ui-gold); }
+.chat.open .chat-input { display: block; }
+
+/* ---------- minimap ---------- */
+.minimap {
+  position: absolute; top: 12px; right: 12px; border: 2px solid var(--ui-border);
+  background: #000; image-rendering: pixelated;
+}
+
+/* ---------- panels ---------- */
+.panel {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 640px; max-height: 80vh; overflow-y: auto;
+  background: var(--ui-bg); border: 2px solid var(--ui-gold); padding: 16px;
+  pointer-events: auto; display: none;
+}
+.panel.open { display: block; }
+.panel h2 { color: var(--ui-gold); letter-spacing: 3px; margin-bottom: 12px; font-size: 16px; }
+.panel .hint { font-size: 11px; color: #9a8f7a; margin-bottom: 10px; }
+.equip-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.equip-slot {
+  width: 112px; min-height: 64px; border: 1px dashed var(--ui-border); padding: 6px;
+  font-size: 11px; cursor: pointer;
+}
+.equip-slot .slot-name { color: #9a8f7a; font-size: 10px; text-transform: uppercase; }
+.inv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.inv-item {
+  border: 1px solid var(--ui-border); padding: 8px; font-size: 11px; cursor: pointer;
+  background: #16121e;
+}
+.inv-item:hover { border-color: var(--ui-gold); }
+.item-name { font-weight: bold; margin-bottom: 4px; }
+.rarity-common .item-name { color: #bbb; }
+.rarity-magic .item-name { color: #5599ff; }
+.rarity-rare .item-name { color: #ffdd44; }
+.rarity-epic .item-name { color: #bb55ff; }
+.rarity-legendary .item-name { color: #ff8833; }
+.affix { color: #7ec87e; }
+.item-tag { color: #e05545; font-size: 10px; }
+.stats-block { font-size: 12px; line-height: 1.8; margin-bottom: 12px; color: #b8ac92; }
+.stats-block b { color: var(--ui-text); }
+
+/* ---------- death ---------- */
+.death-screen {
+  position: absolute; inset: 0; display: none; flex-direction: column;
+  align-items: center; justify-content: center; gap: 20px;
+  background: radial-gradient(ellipse at center, rgba(80,0,0,.55), rgba(0,0,0,.92));
+  pointer-events: auto;
+}
+.death-screen.open { display: flex; }
+.death-screen h1 { color: #a02020; font-size: 48px; letter-spacing: 6px; text-shadow: 3px 3px 0 #000; }
+.death-screen p { color: #9a8f7a; }
+.death-screen button {
+  background: #2a2033; border: 2px solid #a02020; color: #e8ddc8; font-family: inherit;
+  font-size: 18px; padding: 12px 40px; cursor: pointer; letter-spacing: 3px;
+}
+
+/* ---------- floating text ---------- */
+.float-text {
+  position: absolute; pointer-events: none; font-weight: bold; font-size: 15px;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; transform: translate(-50%, -50%);
+  transition: opacity .2s;
+}
+
+.big-notice {
+  position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+  font-size: 26px; color: var(--ui-gold); letter-spacing: 4px;
+  text-shadow: 2px 2px 0 #000; opacity: 0; transition: opacity .4s;
+}
+
+.hint-bar {
+  position: absolute; bottom: 4px; right: 12px; font-size: 10px; color: #6a6055;
+  text-shadow: 1px 1px 0 #000;
+}

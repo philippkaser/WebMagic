@@ -1,0 +1,196 @@
+import './style.css';
+import {
+  CLASSES,
+  ClassId,
+  PROTOCOL_VERSION,
+  ServerMessage,
+} from '@webmagic/shared';
+import { Connection } from './net';
+import { Input } from './input';
+import { WorldState } from './state';
+import { GameRenderer } from './render/renderer';
+import { LoginScreen } from './ui/login';
+import { ChatUI } from './ui/chat';
+import { Hud } from './ui/hud';
+import { InventoryPanel } from './ui/inventory';
+
+const root = document.getElementById('app')!;
+
+async function boot() {
+  const login = new LoginScreen(root);
+  const conn = new Connection();
+  try {
+    await conn.connect();
+  } catch (err) {
+    login.showError((err as Error).message);
+    return;
+  }
+
+  const accepted = new Promise<Extract<ServerMessage, { t: 'welcome' }>>((resolve) => {
+    conn.onMessage = (msg) => {
+      if (msg.t === 'welcome') resolve(msg);
+      else if (msg.t === 'reject') login.showError(msg.reason);
+    };
+  });
+
+  // Re-arm the submit handler until the server lets us in.
+  let done = false;
+  void (async () => {
+    while (!done) {
+      const res = await login.waitForSubmit();
+      conn.send({ t: 'hello', v: PROTOCOL_VERSION, name: res.name, classId: res.classId });
+    }
+  })();
+
+  const welcome = await accepted;
+  done = true;
+  login.hide();
+  // The server's class wins: an existing character keeps its original class.
+  startGame(conn, welcome.classId, welcome.playerId);
+}
+
+function startGame(conn: Connection, classId: ClassId, selfEntityId: number) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+
+  const state = new WorldState();
+  const renderer = new GameRenderer(root, overlay);
+  root.appendChild(overlay);
+
+  const input = new Input(renderer.canvas);
+  const chat = new ChatUI(overlay);
+  const hud = new Hud(overlay, classId);
+  const inventory = new InventoryPanel(overlay);
+
+  // ---- input wiring
+  input.isTyping = () => chat.isOpen;
+  input.onOpenChat = (initial) => chat.open(initial ?? '');
+  input.onToggleInventory = () => inventory.toggle();
+  input.onInteract = () => {
+    const target = state.nearestInteractable();
+    if (target) conn.send({ t: 'interact', id: target.latest.id });
+  };
+  const castSlot = (slot: number) => {
+    const skills = CLASSES[classId].skills;
+    const skillId = skills[slot];
+    if (!skillId || state.self?.dead) return;
+    conn.send({ t: 'cast', skillId, aim: input.facing() });
+  };
+  input.onCast = castSlot;
+  hud.onCastSlot = castSlot;
+  hud.onRespawn = () => conn.send({ t: 'respawn' });
+  chat.onSend = (ch, text) => conn.send({ t: 'chat', ch, text });
+  inventory.onEquip = (itemId) => conn.send({ t: 'equip', itemId });
+  inventory.onUnequip = (slot) => conn.send({ t: 'unequip', slot });
+  inventory.onDrop = (itemId) => conn.send({ t: 'drop', itemId });
+
+  // ---- server messages
+  conn.onMessage = (msg: ServerMessage) => {
+    switch (msg.t) {
+      case 'zone': {
+        state.setZone(msg);
+        renderer.setZone(state);
+        if (msg.kind === 'overworld') {
+          hud.setZone('THE WILDS', 'stay near the lanterns after dark');
+        } else {
+          hud.setZone(
+            (msg.dungeonName ?? 'DUNGEON').toUpperCase(),
+            `floor ${msg.floor} — complete ${msg.keepFloors} floors to keep your loot`
+          );
+          hud.showBigNotice(`${msg.dungeonName} — Floor ${msg.floor}`);
+        }
+        break;
+      }
+      case 'snap':
+        state.applySnapshot(msg, performance.now());
+        break;
+      case 'inv':
+        inventory.setData(msg.items, msg.equipment, msg.attrs);
+        break;
+      case 'chat':
+        chat.addChat(msg.ch, msg.from, msg.text);
+        break;
+      case 'notice':
+        chat.addNotice(msg.text, msg.style ?? 'info');
+        if (msg.style === 'loot') hud.showBigNotice(msg.text);
+        break;
+      case 'fx':
+        handleFx(msg);
+        break;
+      case 'reject':
+        chat.addNotice(msg.reason, 'warn');
+        break;
+    }
+  };
+  conn.onClose = () => {
+    hud.setZone('DISCONNECTED', 'refresh the page to reconnect');
+    chat.addNotice('Connection lost. Refresh to reconnect.', 'warn');
+  };
+
+  function handleFx(msg: Extract<ServerMessage, { t: 'fx' }>) {
+    const now = performance.now();
+    switch (msg.kind) {
+      case 'hit':
+      case 'crit': {
+        if (msg.entId) renderer.sprites.flash(msg.entId, now);
+        const isSelf = msg.entId !== undefined && state.self && msg.entId === selfEntityId;
+        renderer.fx.damageNumber(msg.x, msg.y, String(msg.amount ?? ''), isSelf ? '#ff5544' : '#ffd866');
+        break;
+      }
+      case 'heal':
+        renderer.fx.damageNumber(msg.x, msg.y, `+${msg.amount}`, '#7ec87e');
+        break;
+      case 'death':
+        renderer.fx.damageNumber(msg.x, msg.y, '✝', '#99999a', 20);
+        break;
+      case 'levelup':
+        renderer.fx.nova(msg.x, msg.y, 0xffd866, 3);
+        if (msg.entId === selfEntityId) hud.showBigNotice('LEVEL UP!');
+        break;
+      case 'nova':
+        renderer.fx.nova(msg.x, msg.y, msg.color ?? 0xffffff, msg.amount ?? 3);
+        break;
+      case 'pickup':
+        renderer.fx.damageNumber(msg.x, msg.y, '+', '#d8b45a');
+        break;
+    }
+  }
+
+  // Dev console access: window.__wm.state / .input
+  (window as unknown as Record<string, unknown>).__wm = { state, input, renderer };
+
+  // ---- main loop
+  let last = performance.now();
+  const loop = () => {
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+
+    const { mx, my } = input.moveIntent(dt);
+    const moving = mx !== 0 || my !== 0;
+    const chunk = state.move(mx, my, dt);
+    if (chunk) {
+      conn.send({ t: 'input', seq: chunk.seq, mx: chunk.mx, my: chunk.my, f: input.facing(), dt: chunk.dt });
+    }
+
+    // interact prompt
+    const target = state.nearestInteractable();
+    if (target) {
+      const l = target.latest;
+      let label = 'E — interact';
+      if (l.k === 'portal') label = `E — ${l.v === 'portal-exit' ? 'Leave through' : 'Enter'} ${l.n ?? 'portal'}`;
+      else if (l.k === 'loot') label = `E — pick up ${l.n ?? 'loot'}`;
+      else if (l.k === 'npc') label = `E — talk to ${l.n ?? 'villager'}`;
+      hud.setPrompt(label);
+    } else {
+      hud.setPrompt(null);
+    }
+
+    hud.update(state, now);
+    renderer.render(state, input, now, dt, moving);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+
+void boot();
