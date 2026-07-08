@@ -1,5 +1,6 @@
 import { Rng } from '../math';
 import type { SkillId } from './skills';
+import { PASSIVE_POOL, type PassiveId } from './passives';
 
 export type Slot = 'weapon' | 'armor' | 'helm' | 'boots' | 'trinket';
 export type Rarity = 'common' | 'magic' | 'rare' | 'epic' | 'legendary';
@@ -31,6 +32,8 @@ export interface Item {
   affixes: ItemAffix[];
   /** Weapons define the left-click (primary) and right-click (secondary) skill. */
   weaponSkills?: { primary: SkillId; secondary: SkillId };
+  /** An always-on weapon passive (rolled on rarer weapons). */
+  passive?: PassiveId;
   /** True while carried inside a dungeon and not yet secured (lost on death). */
   dungeonLoot?: boolean;
 }
@@ -131,8 +134,8 @@ let itemCounter = 0;
  * Generate a random piece of equipment. Item power scales with `ilvl`
  * (usually the level of the monster or dungeon floor that dropped it).
  */
-export function generateItem(rng: Rng, ilvl: number, forcedRarity?: Rarity): Item {
-  const rarity = forcedRarity ?? rollRarity(rng);
+export function generateItem(rng: Rng, ilvl: number, forcedRarity?: Rarity, magicFind = 0): Item {
+  const rarity = forcedRarity ?? rollRarity(rng, magicFind);
   const slot = rng.pick(Object.keys(BASE_NAMES) as Slot[]);
   const base = rng.pick(BASE_NAMES[slot]);
 
@@ -168,6 +171,11 @@ export function generateItem(rng: Rng, ilvl: number, forcedRarity?: Rarity): Ite
     ilvl,
     affixes,
   };
-  if (slot === 'weapon') item.weaponSkills = WEAPON_SKILLS[base] ?? WEAPON_SKILLS.Sword;
+  if (slot === 'weapon') {
+    item.weaponSkills = WEAPON_SKILLS[base] ?? WEAPON_SKILLS.Sword;
+    // Rarer weapons carry a passive; legendaries always do.
+    const passiveChance = rarity === 'legendary' ? 1 : rarity === 'epic' ? 0.8 : rarity === 'rare' ? 0.3 : 0;
+    if (rng.chance(passiveChance)) item.passive = rng.pick(PASSIVE_POOL);
+  }
   return item;
 }

@@ -50,3 +50,25 @@ test('any class can wield any weapon (a warrior casts staff spells)', () => {
   p.equip('w-staff');
   assert.equal(p.loadout()[0], 'firebolt');
 });
+
+test('equipped weapon passives are reported by the player', () => {
+  const p = makePlayer('warrior', 1);
+  const vamp: Item = {
+    id: 'vb',
+    name: 'Vampiric Blade',
+    slot: 'weapon',
+    rarity: 'epic',
+    ilvl: 10,
+    affixes: [],
+    weaponSkills: WEAPON_SKILLS.Sword,
+    passive: 'lifesteal',
+  };
+  p.inventory.push(vamp);
+  p.equip('vb');
+  assert.ok(p.hasPassive('lifesteal'));
+  assert.deepEqual(p.passives(), ['lifesteal']);
+  assert.ok(!p.hasPassive('thorns'));
+  // Unequipping removes the passive.
+  p.unequip('weapon');
+  assert.ok(!p.hasPassive('lifesteal'));
+});

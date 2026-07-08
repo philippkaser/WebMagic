@@ -18,6 +18,7 @@ import {
   STAMINA_MAX,
   VerticalState,
   newVerticalState,
+  PassiveId,
 } from '@webmagic/shared';
 import { Entity, allocEntityId } from './entities';
 
@@ -66,6 +67,9 @@ export class Player {
   sprintHeld = false;
   /** Next time a spike trap may hurt this player again. */
   spikeCdUntil = 0;
+  /** Passive proc timers. */
+  orbitCdUntil = 0;
+  auraCdUntil = 0;
   zoneId = 'overworld';
   dungeonRun: DungeonRunState | null = null;
   respawnAt = 0;
@@ -175,6 +179,22 @@ export class Player {
     const cls = CLASSES[this.classId];
     const ws = this.equipment.weapon?.weaponSkills;
     return [ws?.primary ?? cls.primary, ws?.secondary ?? null, cls.skills[0] ?? null, cls.skills[1] ?? null];
+  }
+
+  /** All passives granted by currently-equipped gear. */
+  passives(): PassiveId[] {
+    const out: PassiveId[] = [];
+    for (const item of Object.values(this.equipment)) {
+      if (item?.passive) out.push(item.passive);
+    }
+    return out;
+  }
+
+  hasPassive(id: PassiveId): boolean {
+    for (const item of Object.values(this.equipment)) {
+      if (item?.passive === id) return true;
+    }
+    return false;
   }
 
   /** Can the player cast this skill right now? Weapon skills ignore level gates. */

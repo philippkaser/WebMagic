@@ -178,6 +178,22 @@ export class Zone {
       entId: target.id,
       amount: dmg,
     });
+    // Attacker's lifesteal heals them for a share of the damage dealt.
+    if (source?.kind === 'player') {
+      const attacker = host.playerByEntityId(source.id);
+      if (attacker?.hasPassive('lifesteal') && !source.dead) {
+        this.heal(host, source, dmg * 0.15);
+      }
+    }
+    // Victim's thorns reflect a share back at a melee monster attacker.
+    if (target.kind === 'player' && source && source.kind === 'monster' && !source.dead) {
+      const victim = host.playerByEntityId(target.id);
+      if (victim?.hasPassive('thorns')) {
+        // source of the reflect is the player, so this can't recurse (monsters lack thorns).
+        this.applyDamage(host, source, Math.max(1, dmg * 0.3), target, now);
+      }
+    }
+
     if (target.hp <= 0) {
       target.hp = 0;
       target.dead = true;

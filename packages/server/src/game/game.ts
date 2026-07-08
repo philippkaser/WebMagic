@@ -159,6 +159,9 @@ export class GameServer implements AiHost {
       const sprinting = player.sprintHeld && ent.anim === 'move';
       player.stamina = stepStamina(player.stamina, sprinting, dt);
 
+      // Weapon passives that tick: orbiting fireballs, chilling aura.
+      this.tickPassives(zone, player, now);
+
       if (zone.kind === 'overworld') {
         player.lastOverworld = { x: ent.x, y: ent.y };
       }
@@ -186,6 +189,29 @@ export class GameServer implements AiHost {
           const floor = player.dungeonRun?.floor ?? 0;
           zone.applyDamage(this, ent, 9 + floor * 3, null, now);
         }
+      }
+    }
+  }
+
+  /** Periodic weapon passives: orbiting fireballs and a chilling aura. */
+  private tickPassives(zone: Zone, player: Player, now: number): void {
+    const ent = player.entity;
+    if (player.hasPassive('spinning_fireballs') && now >= player.orbitCdUntil) {
+      player.orbitCdUntil = now + 600;
+      const dmg = Math.round(6 + player.stats.spellPower * 0.15 + player.level * 0.6);
+      let hit = false;
+      for (const e of zone.grid.query(ent.x, ent.y, 2.8)) {
+        if (e.kind !== 'monster' || e.dead) continue;
+        zone.applyDamage(this, e, dmg, ent, now);
+        hit = true;
+      }
+      if (hit) this.broadcastFx(zone, { t: 'fx', kind: 'hit', x: ent.x, y: ent.y, color: 0xff7722, amount: dmg });
+    }
+    if (player.hasPassive('frost_aura') && now >= player.auraCdUntil) {
+      player.auraCdUntil = now + 900;
+      for (const e of zone.grid.query(ent.x, ent.y, 4)) {
+        if (e.kind !== 'monster' || e.dead) continue;
+        e.slowUntil = now + 1200;
       }
     }
   }
@@ -325,7 +351,8 @@ export class GameServer implements AiHost {
         }
       }
       if (Math.random() < def.lootChance) {
-        const item = generateItem(this.lootRng, Math.max(1, def.level * 2));
+        // Higher-level monsters (deeper floors) drop higher item levels + rarer gear.
+        const item = generateItem(this.lootRng, Math.max(1, def.level * 2), undefined, Math.max(0, def.level - 2) * 2);
         dropLoot(zone, victim.x, victim.y, item, now);
       }
       // Slimes split into smaller slimes that immediately turn on the killer.

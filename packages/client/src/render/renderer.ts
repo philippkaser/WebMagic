@@ -45,6 +45,10 @@ export class GameRenderer {
   private fovKick = 0;
   private fovKickV = 0;
   private fxEmitAccum = 0; // throttle for ambient torch/portal particles
+  // Weapon-passive visuals: a following wisp light, orbiting fireballs.
+  private followLight = 0; // colour, 0 = off
+  private orbitFire = false;
+  private orbitOrbs: THREE.Mesh[] = [];
 
   constructor(container: HTMLElement, overlay: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -95,6 +99,17 @@ export class GameRenderer {
 
     this.lights = new LightPool(this.scene);
     this.scene.add(this.sprites.group);
+
+    // Three orbiting fireball orbs (shown only with the Cinder Orbit passive).
+    for (let i = 0; i < 3; i++) {
+      const orb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.17, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0xff7722 })
+      );
+      orb.visible = false;
+      this.scene.add(orb);
+      this.orbitOrbs.push(orb);
+    }
     this.scene.fog = new THREE.Fog(0x000000, 20, 90);
     this.fx = new FxManager(this.scene, overlay);
 
@@ -230,6 +245,19 @@ export class GameRenderer {
     if (hoverGlow) {
       dynamics.push({ x: state.x, y: state.y, height: 1.3 + camZ, color: 0x9a4dff, intensity: 9, range: 12, flicker: 0.25, seed: 7 });
     }
+    // Weapon passives: a following wisp light and orbiting fireballs.
+    if (this.followLight) {
+      dynamics.push({ x: state.x, y: state.y, height: 1.6 + camZ, color: this.followLight, intensity: 7, range: 11, flicker: 0.2, seed: 8 });
+    }
+    if (this.orbitFire) {
+      for (let i = 0; i < this.orbitOrbs.length; i++) {
+        const ang = now * 0.004 + (i * Math.PI * 2) / this.orbitOrbs.length;
+        const ox = state.x + Math.cos(ang) * 2.3;
+        const oy = state.y + Math.sin(ang) * 2.3;
+        this.orbitOrbs[i].position.set(ox, 1.0 + camZ + Math.sin(now * 0.006 + i) * 0.15, oy);
+      }
+      dynamics.push({ x: state.x, y: state.y, height: 1.1 + camZ, color: 0xff7722, intensity: 6, range: 9, flicker: 0.3, seed: 9 });
+    }
     this.lights.update(state.x, state.y, now / 1000, nightness, dynamics, {
       x: state.x,
       y: state.y,
@@ -289,6 +317,13 @@ export class GameRenderer {
   /** Add camera shake (0..1). Nearby impacts, hits taken, detonations. */
   addTrauma(amount: number): void {
     this.trauma = Math.min(1, this.trauma + amount);
+  }
+
+  /** Toggle weapon-passive visuals from the equipped gear. */
+  setPassives(followLight: number, orbitFire: boolean): void {
+    this.followLight = followLight;
+    this.orbitFire = orbitFire;
+    for (const orb of this.orbitOrbs) orb.visible = orbitFire;
   }
 
   /** A downward camera dip + jolt when a jump lands; scales with fall height. */

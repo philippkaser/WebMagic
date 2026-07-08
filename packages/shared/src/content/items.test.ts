@@ -43,6 +43,45 @@ test('item ids are unique across a batch', () => {
   assert.equal(ids.size, 500, 'every generated item id should be unique');
 });
 
+test('legendary weapons always carry a passive; common weapons never do', () => {
+  const rng = new Rng(5);
+  let leg = 0;
+  let com = 0;
+  for (let i = 0; i < 500; i++) {
+    const l = generateItem(rng, 20, 'legendary');
+    if (l.slot === 'weapon') { leg++; assert.ok(l.passive, 'legendary weapon should have a passive'); }
+    const c = generateItem(rng, 20, 'common');
+    if (c.slot === 'weapon') { com++; assert.ok(!c.passive, 'common weapon should have no passive'); }
+  }
+  assert.ok(leg > 0 && com > 0, 'sampled weapons of each rarity');
+});
+
+test('only weapons get weaponSkills and passives', () => {
+  const rng = new Rng(6);
+  for (let i = 0; i < 300; i++) {
+    const it = generateItem(rng, 15);
+    if (it.slot !== 'weapon') {
+      assert.equal(it.weaponSkills, undefined, `${it.slot} must not have weaponSkills`);
+      assert.equal(it.passive, undefined, `${it.slot} must not have a passive`);
+    } else {
+      assert.ok(it.weaponSkills, 'every weapon has skills');
+    }
+  }
+});
+
+test('magic find shifts drops toward higher rarity', () => {
+  const rarePlus = (mf: number) => {
+    const rng = new Rng(9);
+    let n = 0;
+    for (let i = 0; i < 3000; i++) {
+      const r = generateItem(rng, 10, undefined, mf).rarity;
+      if (r === 'rare' || r === 'epic' || r === 'legendary') n++;
+    }
+    return n;
+  };
+  assert.ok(rarePlus(40) > rarePlus(0), 'more rare+ drops with magic find');
+});
+
 test('higher item level yields stronger affixes on average', () => {
   const sum = (ilvl: number) => {
     const rng = new Rng(123);

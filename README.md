@@ -83,7 +83,14 @@ to disable the `/goto` and `/xp` dev commands.
   attribute growth.
 - **Generated equipment** — five slots, five rarities (common → legendary), affix
   system with generated names ("Savage Warhammer of the Bear"). Loot drops from
-  monsters and dungeon floors; click to equip, stats recompute server-side.
+  monsters and dungeon floors; click to equip, stats recompute server-side. **Any
+  class can wield any weapon**, and the weapon defines your left- and right-click
+  skills (a staff casts firebolt/frost-nova, a sword slashes/whirlwinds…) while your
+  class skills sit on E/Q. Rarer weapons roll an always-on **passive** — *Wisplight*
+  (a wisp of light orbits you), *Cinder Orbit* (fireballs circle and scorch nearby
+  foes), *Vampiric* (lifesteal), *Spiteful* (thorns), *Rimeheart* (a slowing frost
+  aura); legendaries always have one. **Deeper dungeon floors drop higher item levels
+  and rarer gear**, so diving pays off.
 - **A living overworld** — villagers follow real daily routines: they work around the
   village square by day (stopping to chat with each other), gather at the inn in the
   evening and walk home through their front doors to sleep at night — and they talk to

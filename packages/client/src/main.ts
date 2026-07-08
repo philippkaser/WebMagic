@@ -2,6 +2,7 @@ import './style.css';
 import {
   CLASSES,
   ClassId,
+  PASSIVES,
   PROTOCOL_VERSION,
   STAMINA_MAX,
   ServerMessage,
@@ -157,11 +158,16 @@ function startGame(
       case 'snap':
         state.applySnapshot(msg, performance.now());
         break;
-      case 'inv':
+      case 'inv': {
         inventory.setData(msg.items, msg.equipment, msg.attrs);
         loadout = msg.loadout;
         hud.setLoadout(msg.loadout);
+        // Drive weapon-passive visuals from equipped gear.
+        const passives = new Set(Object.values(msg.equipment).map((it) => it?.passive).filter(Boolean));
+        const followColor = passives.has('following_light') ? PASSIVES.following_light.color : 0;
+        renderer.setPassives(followColor, passives.has('spinning_fireballs'));
         break;
+      }
       case 'chat':
         chat.addChat(msg.ch, msg.from, msg.text);
         break;

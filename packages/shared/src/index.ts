@@ -7,6 +7,7 @@ export * from './protocol';
 export * from './content/stats';
 export * from './content/classes';
 export * from './content/skills';
+export * from './content/passives';
 export * from './content/items';
 export * from './content/monsters';
 export * from './gen/worldgen';

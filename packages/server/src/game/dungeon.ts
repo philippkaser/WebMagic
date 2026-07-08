@@ -51,7 +51,8 @@ export class DungeonInstance {
     // Floor loot piles — pre-rolled treasure lying in the dark.
     const rng = new Rng(hashSeed(this.seed, floor, 0x100f));
     for (const l of data.lootSpawns) {
-      const item = generateItem(rng, this.portal.level + floor * 2);
+      // Deeper floors: higher item level AND better rarity odds (magic find).
+      const item = generateItem(rng, this.portal.level + floor * 3, undefined, floor * 5);
       const loot = dropLoot(zone, l.x, l.y, item, now);
       loot.despawnAt = undefined; // floor loot never despawns
     }

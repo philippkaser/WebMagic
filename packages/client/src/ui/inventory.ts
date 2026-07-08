@@ -1,4 +1,4 @@
-import { AFFIX_LABELS, Attributes, Item, SKILLS, Slot } from '@webmagic/shared';
+import { AFFIX_LABELS, Attributes, Item, PASSIVES, SKILLS, Slot } from '@webmagic/shared';
 
 const SLOTS: Slot[] = ['weapon', 'helm', 'armor', 'boots', 'trinket'];
 
@@ -97,10 +97,13 @@ function itemBody(item: Item): string {
   const skills = item.weaponSkills
     ? `<div class="affix" style="color:#c8b0e0">⚔ ${SKILLS[item.weaponSkills.primary].name} (L) · ${SKILLS[item.weaponSkills.secondary].name} (R)</div>`
     : '';
+  const passive = item.passive
+    ? `<div class="affix" style="color:#ffcf6b">✦ ${PASSIVES[item.passive].name} — ${PASSIVES[item.passive].desc}</div>`
+    : '';
   return `
     <div class="item-name">${escapeHtml(item.name)}</div>
     <div style="color:#9a8f7a">${item.slot} · ilvl ${item.ilvl} · ${item.rarity}</div>
-    ${skills}${affixes}${tag}
+    ${skills}${passive}${affixes}${tag}
   `;
 }
 
