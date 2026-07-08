@@ -286,7 +286,7 @@ function pbrFromImage(img: HTMLImageElement, tint: [number, number, number] | nu
     for (let x = 0; x < S; x++) {
       const i = y * S + x;
       const o = i * 4;
-      const strength = 2.2;
+      const strength = 4.0; // deeper relief so the stonework reads under torch/lantern
       const dx = (height[y * S + (x - 1 + S) % S] - height[y * S + (x + 1) % S]) * strength;
       const dy = (height[((y + 1) % S) * S + x] - height[((y - 1 + S) % S) * S + x]) * strength;
       const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
@@ -294,7 +294,8 @@ function pbrFromImage(img: HTMLImageElement, tint: [number, number, number] | nu
       normal[o + 1] = (dy * inv * 0.5 + 0.5) * 255;
       normal[o + 2] = (inv * 0.5 + 0.5) * 255;
       normal[o + 3] = 255;
-      const rg = Math.max(0.45, Math.min(1, 1.08 - lum[i] * 0.6)) * 255;
+      // Wider roughness spread: mortar reads matte, worn stone faces a touch glossy.
+      const rg = Math.max(0.32, Math.min(1, 1.22 - lum[i] * 0.95)) * 255;
       rough[o] = rough[o + 1] = rough[o + 2] = rg;
       rough[o + 3] = 255;
     }

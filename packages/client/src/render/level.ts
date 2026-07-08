@@ -3,6 +3,8 @@ import { TILE_SIZE, Tile, TileMap, isBlocking, isWallLike } from '@webmagic/shar
 import { hasTilePBR, spriteDef, tilePBR, tileTexture, wallPBR } from './textures';
 
 export const WALL_HEIGHT = 3.2;
+/** Wall texture repeats per tile. >1 zooms the stonework out (smaller, denser blocks). */
+const WALL_TEX_SCALE = 1.8;
 
 /**
  * Builds the static geometry for one zone from its tile map: merged floor
@@ -85,7 +87,7 @@ export class LevelMesh {
           roughnessMap: pbr.roughnessMap,
           roughness: 1,
           metalness: 0,
-          normalScale: new THREE.Vector2(shiny ? 1.5 : 1, shiny ? 1.5 : 1),
+          normalScale: new THREE.Vector2(shiny ? 2.6 : 2, shiny ? 2.6 : 2),
           emissive: texName === 'portal-pad' ? new THREE.Color(0x2a1550) : new THREE.Color(0x000000),
           emissiveMap: texName === 'portal-pad' ? pbr.map : null,
           emissiveIntensity: texName === 'portal-pad' ? 0.4 : 1,
@@ -112,7 +114,7 @@ export class LevelMesh {
         roughnessMap: pbr.roughnessMap,
         roughness: 1,
         metalness: 0,
-        normalScale: new THREE.Vector2(1.1, 1.1),
+        normalScale: new THREE.Vector2(2.4, 2.4),
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
@@ -203,10 +205,11 @@ function pushWallQuad(
 ): void {
   const [ax, az, bx, bz] = corners;
   const h = WALL_HEIGHT;
-  const vTop = h / TILE_SIZE; // keep texels square (walls are taller than a tile)
+  const u = WALL_TEX_SCALE; // repeats across the tile width
+  const vTop = (h / TILE_SIZE) * WALL_TEX_SCALE; // keep texels square
   // two triangles: (a0,b0,b1) (a0,b1,a1) where 0 = ground, 1 = top
   bucket.pos.push(ax, 0, az, bx, 0, bz, bx, h, bz, ax, 0, az, bx, h, bz, ax, h, az);
-  bucket.uv.push(0, 0, 1, 0, 1, vTop, 0, 0, 1, vTop, 0, vTop);
+  bucket.uv.push(0, 0, u, 0, u, vTop, 0, 0, u, vTop, 0, vTop);
   for (let v = 0; v < 6; v++) bucket.nrm.push(normal[0], normal[1], normal[2]);
 }
 

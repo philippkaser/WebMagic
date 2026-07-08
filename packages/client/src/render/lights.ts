@@ -103,8 +103,10 @@ export class LightPool {
     }
     if (lantern.on) {
       candidates.push({
-        x: lantern.x, y: lantern.y, height: 1.8,
-        color: 0xffc890, intensity: 3 + nightness * 6, range: 13,
+        // A grazing light that always travels with the player so surface
+        // relief (normals) reads even in flat daylight.
+        x: lantern.x, y: lantern.y, height: 1.5,
+        color: 0xffc890, intensity: 5 + nightness * 6, range: 15,
         flicker: 0.12, seed: 3,
       });
     }
