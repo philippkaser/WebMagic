@@ -15,4 +15,6 @@ export const CONFIG = {
   messageRateLimit: 80,
   /** Dev chat commands (/goto, /xp). Disable for real deployments. */
   devCommands: process.env.DEV_COMMANDS !== '0',
+  /** Length of a full in-game day in ms (override to fast-forward for testing). */
+  dayLengthMs: Number(process.env.DAY_LENGTH_MS ?? 10 * 60 * 1000),
 };

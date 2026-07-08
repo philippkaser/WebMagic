@@ -18,6 +18,8 @@ export interface MonsterDef {
   projectile?: { speed: number; lightColor: number; aoeRadius?: number };
   /** Where this monster naturally lives. */
   habitat: 'overworld' | 'dungeon';
+  /** Nocturnal hunters doze through the day and roam wide at night. */
+  nocturnal?: boolean;
 }
 
 export const MONSTERS: Record<MonsterId, MonsterDef> = {
@@ -50,6 +52,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     xp: 18,
     lootChance: 0.2,
     habitat: 'overworld',
+    nocturnal: true,
   },
   orc: {
     id: 'orc',

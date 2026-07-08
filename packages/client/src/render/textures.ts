@@ -223,7 +223,7 @@ function generateStonePBR(seed: number, pal: StonePalette): PbrMaps {
     }
   }
 
-  const toTex = (data: Uint8ClampedArray, srgb: boolean) => {
+  const toTex = (data: Uint8ClampedArray<ArrayBuffer>, srgb: boolean) => {
     const [c, ctx] = makeCanvas(S, S);
     ctx.putImageData(new ImageData(data, S, S), 0, 0);
     const tex = new THREE.CanvasTexture(c);
@@ -243,6 +243,105 @@ function generateStonePBR(seed: number, pal: StonePalette): PbrMaps {
 }
 
 const pbrCache = new Map<string, PbrMaps>();
+
+/**
+ * Build PBR maps from a photo/artwork of a wall: height is estimated from
+ * luminance (bright stone faces high, dark mortar low), normals from the
+ * height gradient, roughness inverted from luminance (mortar rougher than
+ * stone). MirroredRepeat hides any tiling seam in the source image.
+ */
+function pbrFromImage(img: HTMLImageElement, tint: [number, number, number] | null): PbrMaps {
+  const S = 512;
+  const [c, ctx] = makeCanvas(S, S);
+  ctx.drawImage(img, 0, 0, S, S);
+  if (tint) {
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = `rgb(${tint[0]},${tint[1]},${tint[2]})`;
+    ctx.fillRect(0, 0, S, S);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  const src = ctx.getImageData(0, 0, S, S).data;
+
+  // luminance → lightly blurred height field
+  const lum = new Float32Array(S * S);
+  for (let i = 0; i < S * S; i++) {
+    lum[i] = (src[i * 4] * 0.299 + src[i * 4 + 1] * 0.587 + src[i * 4 + 2] * 0.114) / 255;
+  }
+  const height = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      let sum = 0;
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          sum += lum[(((y + oy) % S + S) % S) * S + (((x + ox) % S + S) % S)];
+        }
+      }
+      height[y * S + x] = sum / 9;
+    }
+  }
+
+  const normal = new Uint8ClampedArray(S * S * 4);
+  const rough = new Uint8ClampedArray(S * S * 4);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const i = y * S + x;
+      const o = i * 4;
+      const strength = 2.2;
+      const dx = (height[y * S + (x - 1 + S) % S] - height[y * S + (x + 1) % S]) * strength;
+      const dy = (height[((y + 1) % S) * S + x] - height[((y - 1 + S) % S) * S + x]) * strength;
+      const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
+      normal[o] = (dx * inv * 0.5 + 0.5) * 255;
+      normal[o + 1] = (dy * inv * 0.5 + 0.5) * 255;
+      normal[o + 2] = (inv * 0.5 + 0.5) * 255;
+      normal[o + 3] = 255;
+      const rg = Math.max(0.45, Math.min(1, 1.08 - lum[i] * 0.6)) * 255;
+      rough[o] = rough[o + 1] = rough[o + 2] = rg;
+      rough[o + 3] = 255;
+    }
+  }
+
+  const dataTex = (data: Uint8ClampedArray<ArrayBuffer>) => {
+    const [cc, cctx] = makeCanvas(S, S);
+    cctx.putImageData(new ImageData(data, S, S), 0, 0);
+    return cc;
+  };
+  const finish = (canvas: HTMLCanvasElement, srgb: boolean) => {
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.MirroredRepeatWrapping;
+    tex.wrapT = THREE.MirroredRepeatWrapping;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    return tex;
+  };
+
+  return {
+    map: finish(c, true),
+    normalMap: finish(dataTex(normal), false),
+    roughnessMap: finish(dataTex(rough), false),
+  };
+}
+
+/**
+ * Load the real wall artwork (public/textures/stone-wall.jpg) and build all
+ * wall materials from it. Await before the first zone renders; if it fails
+ * (offline, file missing) wallPBR falls back to the procedural generator.
+ */
+export async function initWallTextures(): Promise<void> {
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('wall texture failed to load'));
+      el.src = '/textures/stone-wall.jpg';
+    });
+    pbrCache.set('stone-wall', pbrFromImage(img, null));
+    pbrCache.set('house-wall', pbrFromImage(img, [255, 208, 165])); // warm masonry
+    pbrCache.set('rock', pbrFromImage(img, [148, 148, 145])); // dark raw rock
+  } catch {
+    console.warn('[textures] wall artwork unavailable — using procedural stone');
+  }
+}
 
 /** PBR wall materials — grey dungeon stone, warm house masonry, raw rock. */
 export function wallPBR(name: 'stone-wall' | 'house-wall' | 'rock'): PbrMaps {

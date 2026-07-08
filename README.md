@@ -57,10 +57,14 @@ to disable the `/goto` and `/xp` dev commands.
 - **Generated equipment** — five slots, five rarities (common → legendary), affix
   system with generated names ("Savage Warhammer of the Bear"). Loot drops from
   monsters and dungeon floors; click to equip, stats recompute server-side.
-- **A living overworld** — 4 villages with wandering villagers and patrolling guards,
-  8 monster camps that repopulate, caravans that periodically set out along the roads
-  with escorts (and sometimes get ambushed — the world announces it), and a full
-  day/night cycle where monsters get bolder after dark.
+- **A living overworld** — villagers follow real daily routines: they work around the
+  village square by day (stopping to chat with each other), gather at the inn in the
+  evening and walk home through their front doors to sleep at night — and they talk to
+  passing players in local chat. Guards walk patrol circuits (perimeter by day, pulled
+  in around the torches at night), caravans set out along the roads with escorts by
+  daylight only (and sometimes get ambushed), monster camps repopulate, wolves are
+  nocturnal hunters that doze through the day, and at night camps send raiding parties
+  marching on the nearest village — guards fight them off while villagers flee.
 - **Multiplayer dungeons** — 4 overworld portals lead to procedurally generated
   dungeons with infinite floors of scaling difficulty. Everyone entering the same
   portal joins the same instance, forming ad-hoc groups. Loot found inside is
@@ -70,7 +74,9 @@ to disable the `/goto` and `/xp` dev commands.
   by the scene, merged tile geometry, fog, and a pooled dynamic light system: torches
   flicker, firebolts light up corridors as they fly, explode on impact with a real
   flash of light and splash damage, portals glow, rare loot shines. Walls use
-  procedurally generated PBR stone materials (color + normal + roughness maps), and
+  real stone artwork (`client/public/textures/stone-wall.jpg`) turned into full PBR
+  materials at load — normal and roughness maps are derived from the image, with
+  tinted variants for house masonry and rock and a procedural fallback — and
   the overworld runs a full day/night cycle with a travelling sun, moonlight, a
   starfield and an in-game clock.
 - **Resilience** — the public HTTP surface survives malformed requests, the tick loop

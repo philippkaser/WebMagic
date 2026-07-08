@@ -71,7 +71,7 @@ export class GameServer implements AiHost {
     this.overworld = new Zone('overworld', 'overworld', world.map, world.torches);
     this.zoneMeta.set('overworld', { zoneId: 'overworld', kind: 'overworld', seed: CONFIG.worldSeed });
 
-    this.worldSim = new WorldSim(this.overworld, world, CONFIG.worldSeed);
+    this.worldSim = new WorldSim(this.overworld, world, CONFIG.worldSeed, CONFIG.dayLengthMs);
     this.worldSim.populate(this.now());
 
     // A logic error in one tick must never take the server down.
@@ -114,9 +114,14 @@ export class GameServer implements AiHost {
     const now = this.now();
     this.tickCount++;
 
-    const aggroMul = this.worldSim.monsterAggroMultiplier(now);
+    const clock = {
+      time: this.worldSim.worldTime(now),
+      isNight: this.worldSim.isNight(now),
+      aggroMul: this.worldSim.monsterAggroMultiplier(now),
+    };
+    const dungeonClock = { time: 0.5, isNight: false, aggroMul: 1 };
     for (const zone of this.activeZones()) {
-      tickAi(this, zone, dt, zone.kind === 'overworld' ? aggroMul : 1);
+      tickAi(this, zone, dt, zone.kind === 'overworld' ? clock : dungeonClock);
       zone.tick(this, dt);
       this.tickPlayers(zone, now);
     }
@@ -303,6 +308,15 @@ export class GameServer implements AiHost {
 
   onCaravanArrived(zone: Zone, caravan: Entity): void {
     this.worldSim.onCaravanArrived(this, caravan);
+  }
+
+  npcSay(zone: Zone, speaker: Entity, text: string): void {
+    for (const session of this.sessions) {
+      const p = session.player;
+      if (!p || p.zoneId !== zone.id) continue;
+      if (dist(p.entity.x, p.entity.y, speaker.x, speaker.y) > CHAT_LOCAL_RADIUS) continue;
+      session.send({ t: 'chat', ch: 'local', from: speaker.name ?? 'Villager', text });
+    }
   }
 
   private onPlayerDied(player: Player, zone: Zone): void {

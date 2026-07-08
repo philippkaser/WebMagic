@@ -5,7 +5,7 @@ import {
   RARITY_COLORS,
   Vec2,
 } from '@webmagic/shared';
-import { Entity, allocEntityId } from './entities';
+import { Entity, VillagerRoutine, allocEntityId } from './entities';
 import { Zone } from './zone';
 import { GUARD_COMBAT } from './ai';
 
@@ -39,7 +39,15 @@ export function spawnNpc(
   variant: 'villager' | 'guard' | 'caravan' | 'caravan-guard',
   x: number,
   y: number,
-  opts: { name?: string; wanderRadius?: number; path?: Vec2[]; escortId?: number } = {}
+  opts: {
+    name?: string;
+    wanderRadius?: number;
+    path?: Vec2[];
+    escortId?: number;
+    routine?: VillagerRoutine;
+    patrolDay?: Vec2[];
+    patrolNight?: Vec2[];
+  } = {}
 ): Entity {
   const isGuard = variant === 'guard' || variant === 'caravan-guard';
   const hp = isGuard ? GUARD_COMBAT.hp : variant === 'caravan' ? 120 : 40;
@@ -67,6 +75,10 @@ export function spawnNpc(
       path: opts.path,
       pathIndex: opts.path ? 0 : undefined,
       escortId: opts.escortId,
+      routine: opts.routine,
+      patrolDay: opts.patrolDay,
+      patrolNight: opts.patrolNight,
+      patrolIndex: 0,
     },
   };
   zone.addEntity(e);

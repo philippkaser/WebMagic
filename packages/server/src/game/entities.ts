@@ -17,6 +17,25 @@ export type Faction = 'players' | 'monsters' | 'none';
 
 export type AiMode = 'idle' | 'wander' | 'chase' | 'flee' | 'travel' | 'return';
 
+/** A place in an NPC's daily schedule. `door` is the spot just outside the
+ *  building's doorway — commutes route through it so nobody paths into walls. */
+export interface RoutineStop {
+  x: number;
+  y: number;
+  door?: Vec2;
+}
+
+export type VillagerActivity = 'work' | 'inn' | 'home';
+
+export interface VillagerRoutine {
+  home: RoutineStop;
+  work: RoutineStop;
+  inn: RoutineStop;
+  activity?: VillagerActivity;
+  /** Waypoints of the current commute (walked front to back). */
+  commute?: Vec2[];
+}
+
 export interface AiState {
   mode: AiMode;
   /** Anchor the entity returns to / wanders around. */
@@ -31,6 +50,23 @@ export interface AiState {
   /** Caravan: id of the caravan leader this guard escorts. */
   escortId?: number;
   fleeFromId?: number;
+
+  // --- daily life
+  /** Villagers: where they sleep, work and drink. */
+  routine?: VillagerRoutine;
+  /** Guards: patrol circuits for day and night shifts. */
+  patrolDay?: Vec2[];
+  patrolNight?: Vec2[];
+  patrolIndex?: number;
+  /** Pause at a patrol point / chat until this time. */
+  waitUntil?: number;
+  chatUntil?: number;
+  chatPartnerId?: number;
+  /** Next time this NPC may say a flavor line to nearby players. */
+  sayNext?: number;
+  /** Stuck detection for waypoint walking. */
+  stuckPos?: Vec2;
+  stuckSince?: number;
 }
 
 export interface Entity {

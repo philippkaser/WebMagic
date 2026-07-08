@@ -1,11 +1,44 @@
-import { MonsterDef, dist, hasLineOfSight } from '@webmagic/shared';
-import { Entity } from './entities';
+import { MonsterDef, Vec2, dist, hasLineOfSight } from '@webmagic/shared';
+import { Entity, VillagerActivity, VillagerRoutine } from './entities';
 import { Zone, ZoneHost } from './zone';
 import { spawnProjectile } from './combat';
 
 export interface AiHost extends ZoneHost {
   onCaravanArrived(zone: Zone, caravan: Entity): void;
+  /** An NPC says something in local chat (heard by nearby players). */
+  npcSay(zone: Zone, speaker: Entity, text: string): void;
 }
+
+/** The world clock as the AI sees it. Dungeons pass a neutral clock. */
+export interface WorldClock {
+  time: number; // 0..1, 0.5 = noon
+  isNight: boolean;
+  aggroMul: number;
+}
+
+const VILLAGER_DAY_LINES = [
+  'Fine weather for honest work.',
+  'The caravans keep us alive. Guard them if you can.',
+  'They say the portals lead to halls full of treasure… and teeth.',
+  'My grandfather built this house with his own hands.',
+  'Heard wolves in the hills last night. Kept the candle burning.',
+];
+const VILLAGER_EVENING_LINES = [
+  'Off to the inn — care for a mug?',
+  'The innkeeper waters the ale, but don’t tell her I said so.',
+  'A song and a fire, that’s all I need tonight.',
+];
+const VILLAGER_NIGHT_LINES = [
+  'Time to lock the doors.',
+  'Stay near the lanterns, stranger.',
+  'Nothing good walks the roads at this hour.',
+];
+const GUARD_LINES = [
+  'Move along. All’s quiet — for now.',
+  'See anything green and ugly, you come find me.',
+  'Third night this week the wolves have come close.',
+  'Stay behind the torchline after dark.',
+];
 
 /** Combat profile for village guards (they reuse the monster stat shape). */
 export const GUARD_COMBAT: MonsterDef = {
@@ -31,7 +64,7 @@ const GUARD_LEASH = 24;
  * Ticks every AI-driven entity in a zone. Target scans run at a staggered
  * ~300ms cadence (ai.nextThink); movement integrates every tick.
  */
-export function tickAi(host: AiHost, zone: Zone, dt: number, monsterAggroMul: number): void {
+export function tickAi(host: AiHost, zone: Zone, dt: number, clock: WorldClock): void {
   const now = host.now();
   for (const e of [...zone.entities.values()]) {
     if (!e.ai || e.dead) continue;
@@ -39,12 +72,42 @@ export function tickAi(host: AiHost, zone: Zone, dt: number, monsterAggroMul: nu
       e.anim = 'idle';
       continue;
     }
-    if (e.kind === 'monster') tickMonster(host, zone, e, dt, now, monsterAggroMul);
-    else if (e.variant === 'guard') tickGuard(host, zone, e, dt, now);
-    else if (e.variant === 'villager') tickVillager(zone, e, dt, now);
+    if (e.kind === 'monster') tickMonster(host, zone, e, dt, now, clock);
+    else if (e.variant === 'guard') tickGuard(host, zone, e, dt, now, clock);
+    else if (e.variant === 'villager') tickVillager(host, zone, e, dt, now, clock);
     else if (e.variant === 'caravan') tickCaravan(host, zone, e, dt, now);
     else if (e.variant === 'caravan-guard') tickCaravanGuard(host, zone, e, dt, now);
   }
+}
+
+/** Any player within earshot? (used to skip flavor chatter into the void) */
+function playersNearby(zone: Zone, e: Entity, range = 14): boolean {
+  return zone.grid.query(e.x, e.y, range).some((o) => o.kind === 'player' && !o.dead);
+}
+
+function maybeSay(host: AiHost, zone: Zone, e: Entity, now: number, lines: string[]): void {
+  const ai = e.ai!;
+  if (ai.sayNext === undefined) ai.sayNext = now + 10_000 + Math.random() * 50_000;
+  if (now < ai.sayNext) return;
+  ai.sayNext = now + 45_000 + Math.random() * 75_000;
+  if (!playersNearby(zone, e)) return;
+  host.npcSay(zone, e, lines[Math.floor(Math.random() * lines.length)]);
+}
+
+/** Walk toward a waypoint; returns true when it was reached (or given up on). */
+function walkWaypoint(zone: Zone, e: Entity, wp: Vec2, dt: number, now: number): boolean {
+  if (dist(e.x, e.y, wp.x, wp.y) < 1.0) return true;
+  // stuck detection: if we barely moved for a while, skip this waypoint
+  const ai = e.ai!;
+  if (!ai.stuckPos || dist(e.x, e.y, ai.stuckPos.x, ai.stuckPos.y) > 0.5) {
+    ai.stuckPos = { x: e.x, y: e.y };
+    ai.stuckSince = now;
+  } else if (now - (ai.stuckSince ?? now) > 4000) {
+    ai.stuckPos = undefined;
+    return true;
+  }
+  moveToward(zone, e, wp.x, wp.y, dt, now);
+  return false;
 }
 
 function effectiveSpeed(e: Entity, now: number): number {
@@ -130,14 +193,22 @@ function validateTarget(zone: Zone, e: Entity, leash: number): Entity | null {
   return target;
 }
 
-function tickMonster(host: AiHost, zone: Zone, e: Entity, dt: number, now: number, aggroMul: number): void {
+function tickMonster(host: AiHost, zone: Zone, e: Entity, dt: number, now: number, clock: WorldClock): void {
   const ai = e.ai!;
   const def = e.monsterDef!;
   let target = validateTarget(zone, e, MONSTER_LEASH);
 
+  // Daily rhythm (overworld camps only): doze near the fire by day, prowl
+  // wide at night. Nocturnal hunters barely react while the sun is up.
+  let aggro = def.aggroRange * clock.aggroMul;
+  if (e.campId !== undefined) {
+    ai.wanderRadius = clock.isNight ? 13 : 5;
+    if (def.nocturnal) aggro *= clock.isNight ? 1.25 : 0.35;
+  }
+
   if (!target && now >= ai.nextThink) {
     ai.nextThink = now + 250 + Math.random() * 200;
-    target = scanForTarget(zone, e, def.aggroRange * aggroMul, 'players');
+    target = scanForTarget(zone, e, aggro, 'players');
     if (target) {
       ai.targetId = target.id;
       ai.mode = 'chase';
@@ -165,7 +236,7 @@ function tickMonster(host: AiHost, zone: Zone, e: Entity, dt: number, now: numbe
   wanderOrIdle(zone, e, dt, now);
 }
 
-function tickGuard(host: AiHost, zone: Zone, e: Entity, dt: number, now: number): void {
+function tickGuard(host: AiHost, zone: Zone, e: Entity, dt: number, now: number, clock: WorldClock): void {
   const ai = e.ai!;
   let target = validateTarget(zone, e, GUARD_LEASH);
   if (!target && now >= ai.nextThink) {
@@ -182,27 +253,114 @@ function tickGuard(host: AiHost, zone: Zone, e: Entity, dt: number, now: number)
     else moveToward(zone, e, target.x, target.y, dt, now);
     return;
   }
-  if (ai.mode === 'return' && dist(e.x, e.y, ai.home.x, ai.home.y) > 2) {
-    moveToward(zone, e, ai.home.x, ai.home.y, dt, now);
+
+  maybeSay(host, zone, e, now, GUARD_LINES);
+
+  // Patrol duty: walk the circuit, pause at each post. Night shift pulls in
+  // close to the torch-lit center; day shift walks the perimeter.
+  const ring = (clock.isNight ? ai.patrolNight : ai.patrolDay) ?? ai.patrolDay;
+  if (ring && ring.length > 0) {
+    if (now < (ai.waitUntil ?? 0)) {
+      e.anim = 'idle';
+      return;
+    }
+    const wp = ring[(ai.patrolIndex ?? 0) % ring.length];
+    if (walkWaypoint(zone, e, wp, dt, now)) {
+      ai.patrolIndex = ((ai.patrolIndex ?? 0) + 1) % ring.length;
+      ai.waitUntil = now + 1500 + Math.random() * 3500;
+      e.anim = 'idle';
+    }
     return;
   }
-  ai.mode = 'wander';
   wanderOrIdle(zone, e, dt, now);
 }
 
-function tickVillager(zone: Zone, e: Entity, dt: number, now: number): void {
+function villagerActivityFor(time: number): VillagerActivity {
+  if (time >= 0.26 && time < 0.68) return 'work';
+  if (time >= 0.68 && time < 0.82) return 'inn';
+  return 'home';
+}
+
+function tickVillager(host: AiHost, zone: Zone, e: Entity, dt: number, now: number, clock: WorldClock): void {
   const ai = e.ai!;
-  // Flee from nearby monsters — guards will (hopefully) handle them.
+  // Danger overrides everything: run from monsters, guards will handle them.
   if (now >= ai.nextThink - 1200) {
     const threat = scanForTarget(zone, e, 7, 'monsters');
     if (threat) {
       const ang = Math.atan2(e.y - threat.y, e.x - threat.x);
-      ai.path = [{ x: e.x + Math.cos(ang) * 8, y: e.y + Math.sin(ang) * 8 }];
-      moveToward(zone, e, ai.path[0].x, ai.path[0].y, dt, now);
+      ai.routine && (ai.routine.commute = undefined);
+      ai.chatUntil = undefined;
+      moveToward(zone, e, e.x + Math.cos(ang) * 8, e.y + Math.sin(ang) * 8, dt, now);
       return;
     }
   }
+
+  const r = ai.routine;
+  if (r) {
+    // --- schedule: work the day, drink in the evening, sleep at night
+    const activity = villagerActivityFor(clock.time);
+    if (r.activity !== activity) {
+      r.activity = activity;
+      r.commute = buildCommute(e, r, activity);
+      ai.chatUntil = undefined;
+    }
+    if (r.commute && r.commute.length > 0) {
+      if (walkWaypoint(zone, e, r.commute[0], dt, now)) r.commute.shift();
+      else return;
+    }
+    // settled at the current stop
+    const stop = r[activity];
+    ai.home = { x: stop.x, y: stop.y };
+    ai.wanderRadius = activity === 'work' ? 4.5 : 0.9;
+
+    const lines =
+      activity === 'work' ? VILLAGER_DAY_LINES : activity === 'inn' ? VILLAGER_EVENING_LINES : VILLAGER_NIGHT_LINES;
+    maybeSay(host, zone, e, now, lines);
+
+    // --- chatting: two idle villagers stop and face each other for a while
+    if (ai.chatUntil && now < ai.chatUntil) {
+      const partner = ai.chatPartnerId ? zone.entities.get(ai.chatPartnerId) : undefined;
+      if (partner && !partner.dead) {
+        e.facing = Math.atan2(partner.y - e.y, partner.x - e.x);
+        e.anim = 'idle';
+        return;
+      }
+      ai.chatUntil = undefined;
+    }
+    if (activity !== 'home' && now >= ai.nextThink && Math.random() < 0.25) {
+      const other = zone.grid
+        .query(e.x, e.y, 3.5)
+        .find((o) => o !== e && o.variant === 'villager' && !o.dead && !(o.ai?.chatUntil && now < o.ai.chatUntil));
+      if (other?.ai) {
+        const until = now + 5000 + Math.random() * 8000;
+        ai.chatUntil = until;
+        ai.chatPartnerId = other.id;
+        other.ai.chatUntil = until;
+        other.ai.chatPartnerId = e.id;
+      }
+    }
+  }
   wanderOrIdle(zone, e, dt, now);
+}
+
+/**
+ * Waypoints for switching activities: leave the current building through its
+ * door, and enter the destination building through its door — never through
+ * a wall.
+ */
+function buildCommute(e: Entity, r: VillagerRoutine, activity: VillagerActivity): Vec2[] {
+  const pts: Vec2[] = [];
+  const target = r[activity];
+  // step outside whatever building we are currently in
+  for (const stop of [r.home, r.inn]) {
+    if (stop !== target && stop.door && dist(e.x, e.y, stop.x, stop.y) < 4.5) {
+      pts.push({ x: stop.door.x, y: stop.door.y });
+      break;
+    }
+  }
+  if (target.door) pts.push({ x: target.door.x, y: target.door.y });
+  pts.push({ x: target.x, y: target.y });
+  return pts;
 }
 
 function tickCaravan(host: AiHost, zone: Zone, e: Entity, dt: number, now: number): void {

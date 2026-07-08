@@ -7,6 +7,7 @@ import {
 } from '@webmagic/shared';
 import { Connection } from './net';
 import { Input } from './input';
+import { initWallTextures } from './render/textures';
 import { WorldState } from './state';
 import { GameRenderer } from './render/renderer';
 import { LoginScreen } from './ui/login';
@@ -18,6 +19,7 @@ const root = document.getElementById('app')!;
 
 async function boot() {
   const login = new LoginScreen(root);
+  const texturesReady = initWallTextures(); // fetch wall artwork while the player picks a class
   const conn = new Connection();
   try {
     await conn.connect();
@@ -44,6 +46,7 @@ async function boot() {
 
   const welcome = await accepted;
   done = true;
+  await texturesReady; // wall materials must exist before the first zone builds
   login.hide();
   // The server's class wins: an existing character keeps its original class.
   startGame(conn, welcome.classId, welcome.playerId, welcome.name);
