@@ -20,17 +20,34 @@ Open a second browser tab to meet yourself in the world.
 
 | Script | What it does |
 | --- | --- |
-| `npm run dev` | server + client with hot reload |
+| `npm run dev` | server (port 8080) + client with hot reload |
 | `npm run dev:server` / `npm run dev:client` | each side alone |
 | `npm run build` | production client bundle (`packages/client/dist`) |
-| `npm run start` | production game server |
+| `npm run start` | build the client, then serve the whole game on **port 80** |
 | `npm run typecheck` | strict TS across all packages |
+
+### Production: one process on the normal http port
+
+`npm start` builds the client and starts the game server, which serves the client
+as static files **and** the game WebSocket (`/ws`) on the same port — **80** by
+default, so the game is simply `http://your-host/`. Override with `PORT=…`.
+
+Binding port 80 on Linux needs privileges — either run as root, or grant node the
+capability once:
+
+```bash
+sudo setcap 'cap_net_bind_service=+ep' "$(command -v node)"
+```
+
+(For HTTPS put a reverse proxy like Caddy or nginx in front and forward `/` and
+`/ws` to this server; the client automatically uses `wss:` on https pages.)
 
 **Controls:** WASD move · mouse (pointer lock) or arrow keys turn · left click / `1`-`2`
 skills · `E` interact · `I` inventory & character sheet · `Enter` chat (`/l ` prefix = local chat).
 
-**Server env:** `PORT`, `WORLD_SEED` (a new seed is a whole new world), `DATA_DIR`,
-`MAX_CONNECTIONS`, `DEV_COMMANDS=0` to disable the `/goto` and `/xp` dev commands.
+**Server env:** `PORT` (default 80; dev script uses 8080), `WORLD_SEED` (a new seed
+is a whole new world), `DATA_DIR`, `CLIENT_DIST`, `MAX_CONNECTIONS`, `DEV_COMMANDS=0`
+to disable the `/goto` and `/xp` dev commands.
 
 ## What's in the game right now
 

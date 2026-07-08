@@ -1,8 +1,10 @@
+import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { ClientMessage, decode } from '@webmagic/shared';
 import { CONFIG } from './config';
 import { GameServer } from './game/game';
 import { Session } from './net/session';
+import { staticHandler } from './net/static';
 import { JsonFileStore } from './persist/store';
 
 async function main() {
@@ -12,7 +14,9 @@ async function main() {
   const game = new GameServer(store);
   game.start();
 
-  const wss = new WebSocketServer({ port: CONFIG.port, path: '/ws' });
+  // One port for everything: the built client over HTTP + the game WebSocket.
+  const httpServer = createServer(staticHandler(CONFIG.clientDist));
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
   wss.on('connection', (ws) => {
     if (game.sessions.size >= CONFIG.maxConnections) {
@@ -38,11 +42,32 @@ async function main() {
     ws.on('error', () => ws.close());
   });
 
-  console.log(`[net] WebMagic server listening on ws://0.0.0.0:${CONFIG.port}/ws (seed ${CONFIG.worldSeed})`);
+  httpServer.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EACCES') {
+      console.error(
+        `[net] no permission to bind port ${CONFIG.port}. Run privileged, ` +
+          `grant the capability (sudo setcap 'cap_net_bind_service=+ep' "$(command -v node)"), ` +
+          `or pick another port with PORT=8080.`
+      );
+    } else if (err.code === 'EADDRINUSE') {
+      console.error(`[net] port ${CONFIG.port} is already in use — set PORT to something free.`);
+    } else {
+      console.error(err);
+    }
+    process.exit(1);
+  });
+
+  httpServer.listen(CONFIG.port, () => {
+    console.log(
+      `[net] WebMagic serving http://0.0.0.0:${CONFIG.port}/ ` +
+        `(game socket at /ws, seed ${CONFIG.worldSeed})`
+    );
+  });
 
   const shutdown = async () => {
     console.log('[net] shutting down…');
     wss.close();
+    httpServer.close();
     await game.stop();
     process.exit(0);
   };

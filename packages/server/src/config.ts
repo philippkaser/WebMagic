@@ -1,5 +1,8 @@
 export const CONFIG = {
-  port: Number(process.env.PORT ?? 8080),
+  /** HTTP + WebSocket port. 80 = the normal http port (needs privileges on Linux). */
+  port: Number(process.env.PORT ?? 80),
+  /** Where the built client lives; served as static files on the same port. */
+  clientDist: process.env.CLIENT_DIST ?? new URL('../../client/dist', import.meta.url).pathname,
   /** Seed for the persistent overworld. Change it and a whole new world is born. */
   worldSeed: Number(process.env.WORLD_SEED ?? 1337),
   motd: 'Welcome to WebMagic. The lanterns are lit — try not to die in the dark.',

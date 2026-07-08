@@ -11,7 +11,7 @@
     "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w @webmagic/server\" \"npm run dev -w @webmagic/client\"",
     "dev:server": "npm run dev -w @webmagic/server",
     "dev:client": "npm run dev -w @webmagic/client",
-    "start": "npm run start -w @webmagic/server",
+    "start": "npm run build -w @webmagic/client && npm run start -w @webmagic/server",
     "build": "npm run build -w @webmagic/client",
     "typecheck": "npm run typecheck --workspaces"
   },
