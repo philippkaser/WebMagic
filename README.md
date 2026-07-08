@@ -113,8 +113,10 @@ to disable the `/goto` and `/xp` dev commands.
   torch- and sunlight with real relief. Water surfaces are **animated** — their
   colour and ripple-normal maps scroll so the surface flows. The overworld runs a full day/night cycle
   with a travelling sun, moonlight, a starfield and an in-game clock. A pooled
-  particle system throws embers from fireball blasts and hits, and kicks up dust
-  when a jump lands. Combat and movement have **game feel**: a trauma-based screen
+  particle system throws embers from fireball blasts and hits, kicks up dust
+  when a jump lands, rises embers off nearby torch flames and swirls motes around
+  portal mouths. Dungeon corridors are lit by sconces at intervals so passages
+  aren't pitch black, and torch flames are drawn at higher resolution. Combat and movement have **game feel**: a trauma-based screen
   shake, springy camera kicks (a recoil punch on casts, a downward dip on landings,
   an FOV punch on nearby blasts) and a red damage vignette when you're struck.
 - **Resilience** — the public HTTP surface survives malformed requests, the tick loop

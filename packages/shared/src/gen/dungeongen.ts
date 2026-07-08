@@ -108,6 +108,18 @@ export function generateDungeonFloor(dungeonSeed: number, floor: number): Dungeo
   torches.push(tileCenter(entry.x, entry.y));
   torches.push(tileCenter(stairsT.x, stairsT.y));
 
+  // --- corridor sconces: light the passages between rooms at intervals so
+  // they aren't pitch black (a torch on a floor tile flanked by two walls).
+  for (let ty = 1; ty < size - 1; ty++) {
+    for (let tx = 1; tx < size - 1; tx++) {
+      if (map.get(tx, ty) !== Tile.Floor) continue;
+      if ((tx + ty) % 6 !== 0) continue; // space them out deterministically
+      const horiz = map.get(tx, ty - 1) === Tile.Wall && map.get(tx, ty + 1) === Tile.Wall;
+      const vert = map.get(tx - 1, ty) === Tile.Wall && map.get(tx + 1, ty) === Tile.Wall;
+      if ((horiz || vert) && rng.chance(0.7)) torches.push(tileCenter(tx, ty));
+    }
+  }
+
   // --- monsters: skip the entry room; the stairs room gets a guardian pack
   const monsterSpawns: MonsterSpawnDef[] = [];
   const pool: MonsterId[] =

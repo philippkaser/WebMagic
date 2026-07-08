@@ -44,6 +44,7 @@ export class GameRenderer {
   private landDipV = 0;
   private fovKick = 0;
   private fovKickV = 0;
+  private fxEmitAccum = 0; // throttle for ambient torch/portal particles
 
   constructor(container: HTMLElement, overlay: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -243,6 +244,31 @@ export class GameRenderer {
     }
 
     this.level?.animate(now * 0.001); // flowing water
+
+    // Ambient particles: embers rising off nearby torches, motes swirling at portals.
+    this.fxEmitAccum += dt;
+    if (this.fxEmitAccum > 0.09) {
+      this.fxEmitAccum = 0;
+      const cx = this.camera.position.x;
+      const cz = this.camera.position.z;
+      for (const f of this.torchFlames) {
+        const dx = f.position.x - cx;
+        const dz = f.position.z - cz;
+        if (dx * dx + dz * dz < 22 * 22 && Math.random() < 0.6) {
+          this.fx.ember(f.position.x, f.position.y + 0.25, f.position.z);
+        }
+      }
+      for (const e of state.entities.values()) {
+        if (e.latest.k !== 'portal' || e.latest.a === 'dead') continue;
+        const p = state.sample(e, now);
+        const dx = p.x - cx;
+        const dz = p.y - cz;
+        if (dx * dx + dz * dz < 30 * 30) {
+          this.fx.portalMote(p.x, 1.4 + Math.random() * 1.2, p.y, e.latest.v === 'portal-exit' ? 0x44ddff : 0x9a4dff);
+        }
+      }
+    }
+
     this.fx.update(dt, this.camera, window.innerWidth, window.innerHeight);
     this.renderer.render(this.scene, this.camera);
   }

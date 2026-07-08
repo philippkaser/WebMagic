@@ -897,11 +897,18 @@ function drawOrb(inner: string, outer: string): HTMLCanvasElement {
 }
 
 function drawFlame(): HTMLCanvasElement {
-  const [c, px] = pixelPainter(8, 12);
-  px(3, 8, 2, 3, '#6b4a2a'); // torch handle
-  px(2, 4, 4, 4, '#ff8822');
-  px(3, 2, 2, 3, '#ffcc44');
-  px(3, 5, 2, 2, '#fff0a0');
+  // Higher-res flame: layered from a deep-orange base up to a white-hot core.
+  const [c, px] = pixelPainter(10, 16);
+  px(4, 12, 2, 4, '#5a3a1e'); // handle
+  px(3, 13, 4, 1, '#3a2412'); // bracket
+  px(3, 8, 4, 4, '#e0530f'); // outer flame
+  px(3, 6, 4, 3, '#ff7a1c');
+  px(4, 4, 2, 4, '#ff9a2a');
+  px(4, 8, 2, 3, '#ffb84a');
+  px(4, 6, 2, 3, '#ffd86a');
+  px(4, 7, 2, 2, '#fff2b8'); // white-hot center
+  px(4, 2, 2, 2, '#ffcc55'); // rising tip
+  px(5, 1, 1, 1, '#ffe89a');
   return c;
 }
 

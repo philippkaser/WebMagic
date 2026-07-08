@@ -157,6 +157,16 @@ export class FxManager {
     this.spawnBurst(x, 0.9, z, 3, 0xb060ff, { speed: 1.1, size: 0.3, ttl: 0.75, gravity: -0.5, drag: 1.8 });
   }
 
+  /** A single rising ember off a torch flame. */
+  ember(x: number, y: number, z: number): void {
+    this.spawnBurst(x, y, z, 1, 0xff9a3c, { speed: 0.7, size: 0.13, ttl: 1.1, gravity: -1.1, drag: 0.4 });
+  }
+
+  /** A swirling mote around a portal mouth. */
+  portalMote(x: number, y: number, z: number, color: number): void {
+    this.spawnBurst(x, y, z, 2, color, { speed: 1.4, size: 0.2, ttl: 0.9, gravity: -0.3, drag: 1.2 });
+  }
+
   update(dt: number, camera: THREE.Camera, width: number, height: number): void {
     const v = new THREE.Vector3();
     for (let i = this.texts.length - 1; i >= 0; i--) {
