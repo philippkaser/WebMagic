@@ -25,6 +25,20 @@ Open a second browser tab to meet yourself in the world.
 | `npm run build` | production client bundle (`packages/client/dist`) |
 | `npm run start` | build the client, then serve the whole game on **port 80** |
 | `npm run typecheck` | strict TS across all packages |
+| `npm test` | run the unit test suite (Node's built-in runner) |
+| `npm run test:watch` | same, re-running on file changes |
+| `npm run check` | typecheck **and** test — what CI runs |
+
+### Testing
+
+Tests use Node's built-in test runner (`node:test`) with `tsx` for TypeScript —
+**no Jest/Vitest, no build step, no extra heavyweight tooling**. A test is just a
+`*.test.ts` file next to the code it covers; `npm test` discovers them by glob and
+the whole suite runs in under a second. The focus is the pure, deterministic core
+in `shared/` — the seeded RNG, tile collision, world/dungeon generation, item rolls
+and stat derivation — because that code is where correctness matters most and is
+trivial to test without standing up a server. GitHub Actions runs `npm run check`
+on every push and PR (`.github/workflows/ci.yml`).
 
 ### Production: one process on the normal http port
 
