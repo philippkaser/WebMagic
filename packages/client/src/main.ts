@@ -89,6 +89,8 @@ function startGame(
   // the server runs the identical shared physics to replicate height to others.
   const vert = newVerticalState();
   let localStam = STAMINA_MAX;
+  let wasGrounded = true;
+  let peakAir = 0; // track fall height so only real landings kick up dust
 
   // ---- input wiring
   input.isTyping = () => chat.isOpen;
@@ -216,6 +218,7 @@ function startGame(
         if (msg.entId) renderer.sprites.flash(msg.entId, now);
         const isSelf = msg.entId !== undefined && state.self && msg.entId === selfEntityId;
         renderer.fx.damageNumber(msg.x, msg.y, String(msg.amount ?? ''), isSelf ? '#ff5544' : '#ffd866');
+        renderer.fx.sparks(msg.x, msg.y, isSelf ? 0xff5544 : 0xffd866, msg.kind === 'crit' ? 12 : 6);
         break;
       }
       case 'heal':
@@ -255,6 +258,11 @@ function startGame(
 
     // Local jump + stamina prediction (mirrors the server exactly).
     stepVertical(vert, classId, now, dt);
+    // Kick up dust on landing after a real jump.
+    peakAir = Math.max(peakAir, vert.z);
+    if (vert.grounded && !wasGrounded && peakAir > 0.6) renderer.fx.dust(state.x, state.y);
+    if (vert.grounded) peakAir = 0;
+    wasGrounded = vert.grounded;
     const sprinting = input.sprinting && moving && localStam > 0 && !isCharging(vert);
     localStam = stepStamina(localStam, sprinting, dt);
     const spdMul = speedMultiplier(sprinting, localStam, isCharging(vert));
