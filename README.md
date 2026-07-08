@@ -112,7 +112,9 @@ to disable the `/goto` and `/xp` dev commands.
   torch- and sunlight with real relief. The overworld runs a full day/night cycle
   with a travelling sun, moonlight, a starfield and an in-game clock. A pooled
   particle system throws embers from fireball blasts and hits, and kicks up dust
-  when a jump lands.
+  when a jump lands. Combat and movement have **game feel**: a trauma-based screen
+  shake, springy camera kicks (a recoil punch on casts, a downward dip on landings,
+  an FOV punch on nearby blasts) and a red damage vignette when you're struck.
 - **Resilience** — the public HTTP surface survives malformed requests, the tick loop
   and process are guarded against stray exceptions, and the client reconnects and
   logs back in automatically if the connection drops.

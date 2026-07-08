@@ -111,6 +111,7 @@ function startGame(
     const skillId = skills[slot];
     if (!skillId || state.self?.dead) return;
     conn.send({ t: 'cast', skillId, aim: input.facing() });
+    renderer.castKick(); // recoil punch for weight
   };
   input.onCast = castSlot;
   hud.onCastSlot = castSlot;
@@ -219,6 +220,13 @@ function startGame(
         const isSelf = msg.entId !== undefined && state.self && msg.entId === selfEntityId;
         renderer.fx.damageNumber(msg.x, msg.y, String(msg.amount ?? ''), isSelf ? '#ff5544' : '#ffd866');
         renderer.fx.sparks(msg.x, msg.y, isSelf ? 0xff5544 : 0xffd866, msg.kind === 'crit' ? 12 : 6);
+        // Juice: taking a hit shakes the camera and flashes red; landing a crit gives a small jolt.
+        if (isSelf) {
+          renderer.addTrauma(msg.kind === 'crit' ? 0.5 : 0.32);
+          hud.flashDamage();
+        } else if (msg.kind === 'crit') {
+          renderer.addTrauma(0.14);
+        }
         break;
       }
       case 'heal':
@@ -260,7 +268,10 @@ function startGame(
     stepVertical(vert, classId, now, dt);
     // Kick up dust on landing after a real jump.
     peakAir = Math.max(peakAir, vert.z);
-    if (vert.grounded && !wasGrounded && peakAir > 0.6) renderer.fx.dust(state.x, state.y);
+    if (vert.grounded && !wasGrounded && peakAir > 0.6) {
+      renderer.fx.dust(state.x, state.y);
+      renderer.landImpact(Math.min(1, peakAir * 0.4)); // bigger falls hit harder
+    }
     if (vert.grounded) peakAir = 0;
     wasGrounded = vert.grounded;
     const sprinting = input.sprinting && moving && localStam > 0 && !isCharging(vert);

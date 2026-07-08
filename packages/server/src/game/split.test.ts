@@ -42,14 +42,21 @@ test('slimelets do not split further (no infinite slime cascade)', () => {
   assert.equal(countVariant(zone, 'slimelet'), 0, 'the killed slimelet is dead and spawns nothing');
 });
 
-test('a plain skeleton does not spawn anything on death', () => {
+function countMonsters(zone: Zone): number {
+  let n = 0;
+  for (const e of zone.entities.values()) if (e.kind === 'monster') n++;
+  return n;
+}
+
+test('a plain skeleton spawns no new monsters on death', () => {
   const game = new GameServer(noopStore);
   const zone = new Zone('test:3', 'dungeon', new TileMap(16, 16, Tile.Floor), []);
   const skele = spawnMonster(zone, MONSTERS.skeleton, 8, 8);
-  const before = zone.entities.size;
+  const before = countMonsters(zone); // 1 — the skeleton itself
 
   skele.dead = true;
   game.onEntityKilled(zone, skele, null);
 
-  assert.equal(zone.entities.size, before, 'non-splitting monsters add no entities');
+  // It may randomly drop loot (a 'loot' entity), but never another monster.
+  assert.equal(countMonsters(zone), before, 'non-splitting monsters spawn no monsters');
 });

@@ -30,6 +30,7 @@ export class Hud {
   private minimap: HTMLCanvasElement;
   private minimapCtx: CanvasRenderingContext2D;
   private lastMinimapDraw = 0;
+  private damageVignette!: HTMLDivElement;
 
   onRespawn: () => void = () => {};
   onCastSlot: (slot: number) => void = () => {};
@@ -85,6 +86,10 @@ export class Hud {
     crosshair.textContent = '+';
     overlay.appendChild(crosshair);
 
+    this.damageVignette = document.createElement('div');
+    this.damageVignette.className = 'damage-vignette';
+    overlay.appendChild(this.damageVignette);
+
     this.deathScreen = document.createElement('div');
     this.deathScreen.className = 'death-screen';
     this.deathScreen.innerHTML = `
@@ -124,6 +129,13 @@ export class Hud {
     } else {
       this.prompt.style.display = 'none';
     }
+  }
+
+  /** Red vignette pulse when the player takes a hit. */
+  flashDamage(): void {
+    this.damageVignette.classList.remove('hit');
+    void this.damageVignette.offsetWidth; // restart the CSS transition
+    this.damageVignette.classList.add('hit');
   }
 
   showBigNotice(text: string): void {

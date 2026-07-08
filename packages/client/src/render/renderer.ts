@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { lerp } from '@webmagic/shared';
+import { dist, lerp } from '@webmagic/shared';
 import type { WorldState } from '../state';
 import type { Input } from '../input';
 import { LevelMesh } from './level';
@@ -34,6 +34,16 @@ export class GameRenderer {
   readonly fx: FxManager;
   private bobPhase = 0;
   private lastNowSec = 0;
+
+  // --- camera juice (screen shake + springy kicks)
+  private readonly baseFov = 72;
+  private trauma = 0; // 0..1, decays; shake scales with trauma²
+  private pitchKick = 0;
+  private pitchKickV = 0;
+  private landDip = 0;
+  private landDipV = 0;
+  private fovKick = 0;
+  private fovKickV = 0;
 
   constructor(container: HTMLElement, overlay: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -178,12 +188,24 @@ export class GameRenderer {
       this.starsMat.opacity = Math.max(0, nightness - 0.35) * 1.4;
     }
 
-    // --- camera
+    // --- camera (base pose + juice: trauma shake, springy kicks, landing dip)
+    this.updateCameraFx(dt);
     this.bobPhase = moving ? this.bobPhase + dt * 9 : 0;
     const bob = Math.sin(this.bobPhase) * 0.045;
-    this.camera.position.set(state.x, EYE_HEIGHT + bob + camZ, state.y);
-    this.camera.rotation.y = input.yaw - Math.PI / 2;
-    this.camera.rotation.x = input.pitch;
+    const shake = this.trauma * this.trauma;
+    const st = now * 0.001;
+    const shakeYaw = shake * 0.055 * Math.sin(st * 62 + 1.3);
+    const shakePitch = shake * 0.05 * Math.sin(st * 71 + 4.1);
+    const shakeRoll = shake * 0.09 * Math.sin(st * 55 + 2.7);
+    this.camera.position.set(state.x, EYE_HEIGHT + bob + camZ + this.landDip, state.y);
+    this.camera.rotation.y = input.yaw - Math.PI / 2 + shakeYaw;
+    this.camera.rotation.x = input.pitch + this.pitchKick + shakePitch;
+    this.camera.rotation.z = shakeRoll;
+    const targetFov = this.baseFov + this.fovKick;
+    if (Math.abs(this.camera.fov - targetFov) > 0.01) {
+      this.camera.fov = targetFov;
+      this.camera.updateProjectionMatrix();
+    }
 
     // --- entities + their emitted light
     this.sprites.sync(state, now, this.camera.position.x, this.camera.position.z);
@@ -220,7 +242,7 @@ export class GameRenderer {
     this.renderer.render(this.scene, this.camera);
   }
 
-  /** Fireball detonation: shockwave visuals + a real flash of light. */
+  /** Fireball detonation: shockwave visuals + a real flash of light + a jolt. */
   explosion(x: number, y: number, color: number, radius: number): void {
     this.fx.explosion(x, y, color, radius);
     this.lights.flash(x, y, color, this.lastNowSec, {
@@ -228,5 +250,40 @@ export class GameRenderer {
       range: 8 + radius * 2,
       durationMs: 380,
     });
+    const d = dist(x, y, this.camera.position.x, this.camera.position.z);
+    this.addTrauma(Math.max(0.15, 0.7 - d * 0.03)); // closer blasts shake harder
+    this.fovKickV += 20;
+  }
+
+  /** Add camera shake (0..1). Nearby impacts, hits taken, detonations. */
+  addTrauma(amount: number): void {
+    this.trauma = Math.min(1, this.trauma + amount);
+  }
+
+  /** A downward camera dip + jolt when a jump lands; scales with fall height. */
+  landImpact(strength: number): void {
+    this.landDipV -= strength * 2.2;
+    this.fovKickV += strength * 10;
+    this.addTrauma(Math.min(0.4, strength * 0.5));
+  }
+
+  /** A recoil punch — casting a skill. */
+  castKick(): void {
+    this.pitchKickV -= 0.9;
+    this.fovKickV += 6;
+  }
+
+  /** Critically-damped springs pull the kicks back to rest each frame. */
+  private updateCameraFx(dt: number): void {
+    this.trauma = Math.max(0, this.trauma - dt * 1.7);
+    const k = 90;
+    const damp = 15;
+    const spring = (p: number, v: number): [number, number] => {
+      const nv = v + (-k * p - damp * v) * dt;
+      return [p + nv * dt, nv];
+    };
+    [this.pitchKick, this.pitchKickV] = spring(this.pitchKick, this.pitchKickV);
+    [this.landDip, this.landDipV] = spring(this.landDip, this.landDipV);
+    [this.fovKick, this.fovKickV] = spring(this.fovKick, this.fovKickV);
   }
 }
