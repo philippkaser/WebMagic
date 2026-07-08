@@ -1073,6 +1073,81 @@ function drawTree(): HTMLCanvasElement {
   return c;
 }
 
+function drawChicken(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(12, 10);
+  px(3, 4, 6, 4, '#f2f2f2'); // body
+  px(3, 4, 2, 4, '#dcdcdc'); // shadow
+  px(2, 2, 3, 3, '#f8f8f8'); // head/neck
+  px(2, 1, 2, 1, '#e04040'); // comb
+  px(1, 3, 1, 1, '#f0a020'); // beak
+  px(3, 3, 1, 1, '#222222'); // eye
+  px(8, 3, 2, 3, '#e8e8e8'); // tail
+  px(4, 8, 1, 2, '#f0a020'); // legs
+  px(6, 8, 1, 2, '#f0a020');
+  return c;
+}
+
+function drawBarrel(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(12, 16);
+  px(3, 3, 6, 12, '#8a5a2e'); // staves
+  px(3, 3, 2, 12, '#6b4522'); // shadow
+  px(2, 4, 8, 2, '#5a3a1e'); // hoops
+  px(2, 8, 8, 2, '#5a3a1e');
+  px(2, 12, 8, 2, '#5a3a1e');
+  px(3, 2, 6, 1, '#9a6a3a');
+  return c;
+}
+
+function drawCrate(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(12, 12);
+  px(2, 2, 8, 8, '#9a713e');
+  px(2, 2, 8, 8, '#9a713e');
+  px(2, 2, 2, 8, '#7a5630');
+  px(2, 2, 8, 1, '#b98a52');
+  px(2, 5, 8, 2, '#6b4a28'); // planks
+  px(5, 2, 2, 8, '#6b4a28');
+  return c;
+}
+
+function drawFlowers(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(12, 10);
+  px(2, 6, 1, 4, '#3a6b28'); // stems
+  px(5, 5, 1, 5, '#3a6b28');
+  px(8, 7, 1, 3, '#3a6b28');
+  px(1, 4, 3, 2, '#e05a6a'); // red
+  px(4, 3, 3, 2, '#ffd23a'); // yellow
+  px(7, 5, 3, 2, '#8a6dff'); // violet
+  px(2, 4, 1, 1, '#fff0a0');
+  px(5, 3, 1, 1, '#fff0a0');
+  return c;
+}
+
+function drawHaybale(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(14, 10);
+  px(2, 3, 10, 7, '#c8a83a');
+  px(2, 3, 10, 2, '#dcbe52');
+  px(2, 5, 10, 1, '#a88a2a'); // binding lines
+  px(2, 8, 10, 1, '#a88a2a');
+  px(2, 3, 2, 7, '#a88a2a');
+  return c;
+}
+
+function drawStall(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(20, 18);
+  px(2, 10, 16, 5, '#8a6d4b'); // counter
+  px(2, 14, 2, 4, '#5a4530'); // legs
+  px(16, 14, 2, 4, '#5a4530');
+  px(3, 2, 14, 3, '#b8452e'); // canopy
+  px(3, 5, 14, 2, '#d8d0b8'); // stripe
+  for (let i = 3; i < 17; i += 2) px(i, 5, 1, 2, '#b8452e'); // striped canopy
+  px(2, 5, 1, 6, '#6b5030'); // poles
+  px(17, 5, 1, 6, '#6b5030');
+  px(5, 11, 2, 2, '#e05a6a'); // goods on counter
+  px(9, 11, 2, 2, '#ffd23a');
+  px(13, 11, 2, 2, '#5a9a3a');
+  return c;
+}
+
 function drawCaravan(): HTMLCanvasElement {
   const [c, px] = pixelPainter(20, 16);
   px(2, 4, 14, 7, '#8a6d4b'); // wagon body
@@ -1144,6 +1219,11 @@ export function spriteDef(variant: string): SpriteDef {
         w = 1.8;
         h = 1.26;
         break;
+      case 'chicken':
+        canvas = drawChicken();
+        w = 0.6;
+        h = 0.5;
+        break;
       case 'slime':
         canvas = drawSlime('#5bb84a', '#2f7a2c', '#9fe08a');
         w = 1.5;
@@ -1192,6 +1272,26 @@ export function spriteDef(variant: string): SpriteDef {
       case 'tree':
         canvas = drawTree();
         w = 2.8; h = 4.2;
+        break;
+      case 'barrel':
+        canvas = drawBarrel();
+        w = 0.9; h = 1.2;
+        break;
+      case 'crate':
+        canvas = drawCrate();
+        w = 1.0; h = 1.0;
+        break;
+      case 'flowers':
+        canvas = drawFlowers();
+        w = 0.9; h = 0.75;
+        break;
+      case 'haybale':
+        canvas = drawHaybale();
+        w = 1.3; h = 0.95;
+        break;
+      case 'stall':
+        canvas = drawStall();
+        w = 2.6; h = 2.3;
         break;
       default:
         canvas = drawOrb('#ccccff', '#8888aa');

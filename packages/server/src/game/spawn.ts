@@ -85,6 +85,28 @@ export function spawnNpc(
   return e;
 }
 
+/** A harmless ambient critter (chicken…): wanders, can't fight or be targeted. */
+export function spawnCritter(zone: Zone, variant: string, x: number, y: number): Entity {
+  const e: Entity = {
+    id: allocEntityId(),
+    kind: 'npc',
+    variant,
+    x,
+    y,
+    facing: Math.random() * Math.PI * 2,
+    radius: 0.28,
+    speed: 1.7,
+    hp: 5,
+    maxHp: 5,
+    anim: 'idle',
+    faction: 'none', // never a combat target
+    dead: false,
+    ai: { mode: 'wander', home: { x, y }, wanderRadius: 6, nextThink: 0 },
+  };
+  zone.addEntity(e);
+  return e;
+}
+
 export function spawnPortal(
   zone: Zone,
   x: number,

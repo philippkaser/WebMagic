@@ -47,6 +47,13 @@ export interface RoadDef {
   points: Vec2[];
 }
 
+/** A decorative prop (barrel, crate, flowers…) in world coordinates. */
+export interface PropDef {
+  kind: 'barrel' | 'crate' | 'flowers' | 'haybale' | 'stall';
+  x: number;
+  y: number;
+}
+
 export interface OverworldData {
   map: TileMap;
   villages: VillageDef[];
@@ -55,6 +62,8 @@ export interface OverworldData {
   roads: RoadDef[];
   /** Static torch positions in world coordinates (reactive light sources). */
   torches: Vec2[];
+  /** Decorative props that make settlements feel lived-in. */
+  props: PropDef[];
 }
 
 const VILLAGE_NAMES = [
@@ -165,7 +174,23 @@ export function generateOverworld(seed: number): OverworldData {
   for (const v of villages) flatten(v.cx, v.cy, v.radius + 5);
   for (const p of portals) flatten(p.tx, p.ty, 6);
 
-  return { map, villages, camps, portals, roads, torches };
+  // --- decorative props scattered around each village to make it lived-in
+  const props: PropDef[] = [];
+  const propKinds: PropDef['kind'][] = ['barrel', 'crate', 'flowers', 'flowers', 'haybale', 'stall'];
+  for (const v of villages) {
+    const count = 10 + rng.int(0, 6);
+    for (let i = 0; i < count; i++) {
+      const ang = rng.next() * Math.PI * 2;
+      const r = rng.range(3, v.radius - 1);
+      const tx = Math.round(v.cx + Math.cos(ang) * r);
+      const ty = Math.round(v.cy + Math.sin(ang) * r);
+      const t = map.get(tx, ty);
+      if (t !== Tile.Grass && t !== Tile.Road) continue; // only on open ground
+      props.push({ kind: rng.pick(propKinds), x: (tx + 0.5) * 2, y: (ty + 0.5) * 2 });
+    }
+  }
+
+  return { map, villages, camps, portals, roads, torches, props };
 }
 
 function scatterBlobs(rng: Rng, map: TileMap, tile: Tile, count: number, rMin: number, rMax: number) {

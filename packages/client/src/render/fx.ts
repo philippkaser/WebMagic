@@ -167,6 +167,16 @@ export class FxManager {
     this.spawnBurst(x, y, z, 2, color, { speed: 1.4, size: 0.2, ttl: 0.9, gravity: -0.3, drag: 1.2 });
   }
 
+  /** A drifting glowing firefly (night ambiance). */
+  firefly(x: number, y: number, z: number): void {
+    this.spawnBurst(x, y, z, 1, 0xcaff6a, { speed: 0.5, size: 0.13, ttl: 2.6, gravity: -0.04, drag: 0.5 });
+  }
+
+  /** A fluttering butterfly (daytime ambiance). */
+  butterfly(x: number, y: number, z: number, color: number): void {
+    this.spawnBurst(x, y, z, 1, color, { speed: 1.1, size: 0.2, ttl: 2.2, gravity: 0.05, drag: 0.4, soft: true });
+  }
+
   update(dt: number, camera: THREE.Camera, width: number, height: number): void {
     const v = new THREE.Vector3();
     for (let i = this.texts.length - 1; i >= 0; i--) {

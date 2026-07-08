@@ -146,7 +146,7 @@ export class GameRenderer {
     if (!state.map || !state.zone) return;
 
     this.level = new LevelMesh();
-    this.level.build(state.map, state.zone.kind);
+    this.level.build(state.map, state.zone.kind, state.overworld?.props ?? []);
     this.scene.add(this.level.group);
 
     const torches = state.overworld?.torches ?? state.dungeonFloor?.torches ?? [];
@@ -309,6 +309,17 @@ export class GameRenderer {
         const dz = p.y - cz;
         if (dx * dx + dz * dz < 30 * 30) {
           this.fx.portalMote(p.x, 1.4 + Math.random() * 1.2, p.y, e.latest.v === 'portal-exit' ? 0x44ddff : 0x9a4dff);
+        }
+      }
+
+      // Ambient life in the overworld: fireflies after dark, butterflies by day.
+      if (!isDungeon) {
+        const off = () => (Math.random() * 2 - 1) * 9;
+        if (nightness > 0.45 && Math.random() < 0.8) {
+          this.fx.firefly(state.x + off(), 0.5 + Math.random() * 1.3, state.y + off());
+        } else if (nightness < 0.3 && Math.random() < 0.4) {
+          const wings = [0xffb0c8, 0xffe08a, 0xa8d8ff, 0xd8b0ff];
+          this.fx.butterfly(state.x + off(), 0.7 + Math.random() * 1.2, state.y + off(), wings[(Math.random() * wings.length) | 0]);
         }
       }
     }

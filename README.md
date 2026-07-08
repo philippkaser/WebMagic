@@ -99,6 +99,9 @@ to disable the `/goto` and `/xp` dev commands.
   daylight only (and sometimes get ambushed), monster camps repopulate, wolves are
   nocturnal hunters that doze through the day, and at night camps send raiding parties
   marching on the nearest village — guards fight them off while villagers flee.
+  Villages are dressed with props (barrels, crates, market stalls, hay bales,
+  flower patches) and **chickens peck around**, while **fireflies drift after dark
+  and butterflies flit by day** — small touches that make the world feel lived-in.
 - **Multiplayer dungeons** — 4 overworld portals lead to procedurally generated
   dungeons with infinite floors of scaling difficulty. Everyone entering the same
   portal joins the same instance, forming ad-hoc groups. Loot found inside is

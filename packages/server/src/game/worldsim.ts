@@ -12,7 +12,7 @@ import {
 } from '@webmagic/shared';
 import { Entity, RoutineStop } from './entities';
 import { Zone } from './zone';
-import { spawnMonster, spawnNpc, spawnPortal } from './spawn';
+import { spawnCritter, spawnMonster, spawnNpc, spawnPortal } from './spawn';
 
 export interface WorldSimHost {
   now(): number;
@@ -151,6 +151,13 @@ export class WorldSim {
           patrolDay: [...dayRing.slice(i * 2), ...dayRing.slice(0, i * 2)],
           patrolNight: [...nightRing.slice(i), ...nightRing.slice(0, i)],
         });
+      }
+
+      // A few chickens pecking around to make the village feel lived-in.
+      const chickenCount = this.rng.int(2, 4);
+      for (let i = 0; i < chickenCount; i++) {
+        const spot = this.openSpot(center.x, center.y, v.radius * TILE_SIZE * 0.6);
+        spawnCritter(this.zone, 'chicken', spot.x, spot.y);
       }
     }
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TILE_SIZE, Tile, TileMap, isBlocking, isWallLike } from '@webmagic/shared';
+import type { PropDef } from '@webmagic/shared';
 import { hasTilePBR, spriteDef, tilePBR, tileTexture, wallPBR } from './textures';
 
 export const WALL_HEIGHT = 3.2;
@@ -17,7 +18,7 @@ export class LevelMesh {
   /** Water colour + normal maps, scrolled each frame for a flowing surface. */
   private waterMaps: THREE.Texture[] = [];
 
-  build(map: TileMap, kind: 'overworld' | 'dungeon'): void {
+  build(map: TileMap, kind: 'overworld' | 'dungeon', props: PropDef[] = []): void {
     const floorBuckets = new Map<string, number[]>(); // texture -> positions of tile quads
     const wallBuckets = new Map<string, { pos: number[]; uv: number[]; nrm: number[] }>();
     const treePositions: { x: number; y: number }[] = [];
@@ -168,6 +169,34 @@ export class LevelMesh {
       mesh.frustumCulled = false;
       this.group.add(mesh);
       this.disposables.push(geo, mat);
+    }
+
+    // --- decorative props: billboarded cross-quads, sitting on the terrain.
+    if (props.length > 0) {
+      const byKind = new Map<string, PropDef[]>();
+      for (const p of props) {
+        let arr = byKind.get(p.kind);
+        if (!arr) byKind.set(p.kind, (arr = []));
+        arr.push(p);
+      }
+      for (const [kind, list] of byKind) {
+        const def = spriteDef(kind);
+        const pos: number[] = [];
+        const uv: number[] = [];
+        const nrm: number[] = [];
+        for (const p of list) {
+          pushCrossQuads(pos, uv, nrm, p.x, p.y, def.w, def.h, map.elevationAtWorld(p.x, p.y));
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+        const mat = new THREE.MeshLambertMaterial({ map: def.texture, alphaTest: 0.5, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.frustumCulled = false;
+        this.group.add(mesh);
+        this.disposables.push(geo, mat);
+      }
     }
 
     // --- spike traps: a cluster of sharp metal cones per trap tile.
