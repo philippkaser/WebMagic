@@ -10,7 +10,7 @@ import { Input } from './input';
 import { initWallTextures } from './render/textures';
 import { WorldState } from './state';
 import { GameRenderer } from './render/renderer';
-import { LoginScreen } from './ui/login';
+import { LoginScreen, rememberHero } from './ui/login';
 import { ChatUI } from './ui/chat';
 import { Hud } from './ui/hud';
 import { InventoryPanel } from './ui/inventory';
@@ -37,22 +37,32 @@ async function boot() {
 
   // Re-arm the submit handler until the server lets us in.
   let done = false;
+  let passphrase = '';
   void (async () => {
     while (!done) {
       const res = await login.waitForSubmit();
-      conn.send({ t: 'hello', v: PROTOCOL_VERSION, name: res.name, classId: res.classId });
+      passphrase = res.pass;
+      conn.send({ t: 'hello', v: PROTOCOL_VERSION, name: res.name, classId: res.classId, pass: res.pass });
     }
   })();
 
   const welcome = await accepted;
   done = true;
+  // Remember this hero so next visit pre-fills the login (and prompts for the
+  // passphrase if one was set). The server's class wins for existing characters.
+  rememberHero(welcome.name, welcome.classId, passphrase.length > 0);
   await texturesReady; // wall materials must exist before the first zone builds
   login.hide();
-  // The server's class wins: an existing character keeps its original class.
-  startGame(conn, welcome.classId, welcome.playerId, welcome.name);
+  startGame(conn, welcome.classId, welcome.playerId, welcome.name, passphrase);
 }
 
-function startGame(initialConn: Connection, classId: ClassId, initialSelfId: number, playerName: string) {
+function startGame(
+  initialConn: Connection,
+  classId: ClassId,
+  initialSelfId: number,
+  playerName: string,
+  passphrase: string
+) {
   let conn = initialConn;
   let selfEntityId = initialSelfId;
   const overlay = document.createElement('div');
@@ -163,7 +173,7 @@ function startGame(initialConn: Connection, classId: ClassId, initialSelfId: num
             clearTimeout(timeout);
             resolve(false);
           };
-          c.send({ t: 'hello', v: PROTOCOL_VERSION, name: playerName, classId });
+          c.send({ t: 'hello', v: PROTOCOL_VERSION, name: playerName, classId, pass: passphrase });
         });
         if (!ok) continue; // name may still be held by the dying session — retry
         conn = c;

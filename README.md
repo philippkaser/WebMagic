@@ -16,7 +16,9 @@ npm run dev        # game server (ws://localhost:8080) + client (http://localhos
 ```
 
 Open http://localhost:5173, pick a name and a class, and walk out of the inn.
-Open a second browser tab to meet yourself in the world.
+Open a second browser tab to meet yourself in the world. Set a passphrase on the
+login screen to protect your hero — it's remembered on this browser so you log
+straight back into the same character next visit (see **Accounts** below).
 
 | Script | What it does |
 | --- | --- |
@@ -99,6 +101,12 @@ to disable the `/goto` and `/xp` dev commands.
 - **Chat** — global and local (earshot) channels plus world event announcements.
 - **Persistence** — characters (level, XP, inventory, equipment, position) survive
   server restarts.
+- **Accounts** — log back into your previous character instead of making a new one
+  each time. The client remembers your name and class on this browser and pre-fills
+  the login screen. Set a passphrase to protect a name (scrypt-hashed server-side,
+  `salt:hash`, never stored in plaintext) so only you can log in as that hero; leave
+  it blank for an open name, as before. Existing characters stay open until the first
+  passphrase claims them.
 
 ## Architecture
 

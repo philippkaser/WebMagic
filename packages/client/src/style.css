@@ -56,6 +56,7 @@ canvas.game {
 }
 .login button:hover { background: #3a2d47; }
 .login .error { color: #e05545; min-height: 20px; }
+.login .hint { color: #7a7060; font-size: 13px; margin-top: -14px; max-width: 300px; text-align: center; }
 
 /* ---------- HUD ---------- */
 .hud-bottom {

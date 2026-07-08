@@ -37,6 +37,7 @@ import { tickAi, AiHost } from './ai';
 import { castSkill } from './combat';
 import { dropLoot } from './spawn';
 import type { PlayerStore } from '../persist/store';
+import { hashPassphrase, verifyPassphrase } from '../auth';
 
 export class GameServer implements AiHost {
   readonly sessions = new Set<Session>();
@@ -338,7 +339,7 @@ export class GameServer implements AiHost {
 
   handleMessage(session: Session, msg: ClientMessage): void {
     if (msg.t === 'hello') {
-      void this.handleHello(session, msg.name, msg.classId, msg.v);
+      void this.handleHello(session, msg.name, msg.classId, msg.v, msg.pass);
       return;
     }
     const player = session.player;
@@ -385,7 +386,13 @@ export class GameServer implements AiHost {
     }
   }
 
-  private async handleHello(session: Session, rawName: string, classId: string, version: number): Promise<void> {
+  private async handleHello(
+    session: Session,
+    rawName: string,
+    classId: string,
+    version: number,
+    rawPass?: string
+  ): Promise<void> {
     if (session.player) return;
     if (version !== PROTOCOL_VERSION) {
       session.send({ t: 'reject', reason: 'Client is outdated — refresh the page.' });
@@ -400,6 +407,11 @@ export class GameServer implements AiHost {
       session.send({ t: 'reject', reason: 'Unknown class.' });
       return;
     }
+    const passphrase = typeof rawPass === 'string' ? rawPass : '';
+    if (passphrase && (passphrase.length < 4 || passphrase.length > 64)) {
+      session.send({ t: 'reject', reason: 'Passphrase must be 4-64 characters.' });
+      return;
+    }
     for (const s of this.sessions) {
       if (s.player && s.player.name.toLowerCase() === name.toLowerCase()) {
         session.send({ t: 'reject', reason: 'That hero is already in the world.' });
@@ -408,7 +420,22 @@ export class GameServer implements AiHost {
     }
 
     let record = await this.store.load(name);
-    if (!record) {
+    let claimedPassHash: string | undefined;
+    if (record) {
+      // Existing character. If it's protected, the passphrase must match.
+      if (record.passHash) {
+        if (!verifyPassphrase(passphrase, record.passHash)) {
+          session.send({
+            t: 'reject',
+            reason: passphrase ? 'Wrong passphrase for that hero.' : 'That hero is protected — enter its passphrase.',
+          });
+          return;
+        }
+      } else if (passphrase) {
+        // Previously-open character: the first passphrase claims and protects it.
+        claimedPassHash = hashPassphrase(passphrase);
+      }
+    } else {
       const spawn = this.villages[0]?.innSpawn ?? { x: 20, y: 20 };
       record = {
         name,
@@ -419,10 +446,12 @@ export class GameServer implements AiHost {
         equipment: {},
         x: spawn.x,
         y: spawn.y,
+        passHash: passphrase ? hashPassphrase(passphrase) : undefined,
       };
     }
 
     const player = new Player(record);
+    if (claimedPassHash) player.passHash = claimedPassHash;
     session.player = player;
     // Characters that logged out inside a dungeon come back at the inn.
     if (this.overworld.map.blockedAtWorld(player.entity.x, player.entity.y)) {
@@ -435,6 +464,10 @@ export class GameServer implements AiHost {
     this.overworld.players.add(player);
     player.zoneId = 'overworld';
     session.needsZoneSync = true;
+
+    // Persist immediately so new characters and freshly-claimed passphrases
+    // survive a crash before the player disconnects.
+    await this.store.save(player.toRecord());
 
     session.send({ t: 'welcome', playerId: player.entity.id, name: player.name, classId: player.classId, motd: CONFIG.motd });
     this.sendInventory(player);

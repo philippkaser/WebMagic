@@ -28,6 +28,8 @@ export interface PlayerRecord {
   equipment: Partial<Record<Slot, Item>>;
   x: number;
   y: number;
+  /** scrypt `salt:hash` of the account passphrase; absent = open name. */
+  passHash?: string;
 }
 
 export interface DungeonRunState {
@@ -41,6 +43,8 @@ export class Player {
   readonly entity: Entity;
   readonly name: string;
   readonly classId: ClassId;
+  /** scrypt `salt:hash` of the account passphrase; undefined = open name. */
+  passHash?: string;
 
   level: number;
   xp: number;
@@ -62,6 +66,7 @@ export class Player {
   constructor(record: PlayerRecord) {
     this.name = record.name;
     this.classId = record.classId;
+    this.passHash = record.passHash;
     this.level = record.level;
     this.xp = record.xp;
     this.inventory = record.inventory;
@@ -223,6 +228,7 @@ export class Player {
       equipment: this.equipment,
       x: this.entity.x,
       y: this.entity.y,
+      passHash: this.passHash,
     };
   }
 }

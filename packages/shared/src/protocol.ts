@@ -46,6 +46,8 @@ export interface HelloMsg {
   v: number; // protocol version
   name: string;
   classId: ClassId;
+  /** Optional account passphrase. Protects a name; blank/absent = open name. */
+  pass?: string;
 }
 
 export interface InputMsg {
