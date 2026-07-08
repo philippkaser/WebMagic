@@ -94,14 +94,26 @@ function startGame(
 
   // ---- input wiring
   input.isTyping = () => chat.isOpen;
+  // Menus need the cursor, so free the mouse while any is open and don't let
+  // the canvas recapture it until they're all closed.
+  input.canLock = () => !inventory.isOpen && !chat.isOpen;
+  const releaseMouseForMenu = () => {
+    if (document.pointerLockElement) document.exitPointerLock();
+  };
   input.onJump = (phase) => {
     const now = performance.now();
     if (phase === 'down') jumpPress(vert, classId, now);
     else jumpRelease(vert, classId, now);
     conn.send({ t: 'jump', phase });
   };
-  input.onOpenChat = (initial) => chat.open(initial ?? '');
-  input.onToggleInventory = () => inventory.toggle();
+  input.onOpenChat = (initial) => {
+    chat.open(initial ?? '');
+    releaseMouseForMenu();
+  };
+  input.onToggleInventory = () => {
+    inventory.toggle();
+    if (inventory.isOpen) releaseMouseForMenu();
+  };
   input.onInteract = () => {
     const target = state.nearestInteractable();
     if (target) conn.send({ t: 'interact', id: target.latest.id });

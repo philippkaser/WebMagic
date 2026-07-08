@@ -17,6 +17,8 @@ export class Input {
   onJump: (phase: 'down' | 'up') => void = () => {};
   /** UI can suppress game input while typing. */
   isTyping: () => boolean = () => false;
+  /** UI can block the canvas from grabbing the mouse while a menu is open. */
+  canLock: () => boolean = () => true;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -45,6 +47,8 @@ export class Input {
     window.addEventListener('blur', () => this.keys.clear());
 
     canvas.addEventListener('click', () => {
+      // Don't recapture the mouse while a menu (inventory, etc.) wants it.
+      if (!this.canLock()) return;
       if (document.pointerLockElement !== canvas) {
         canvas.requestPointerLock();
       }

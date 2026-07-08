@@ -52,7 +52,7 @@ export class InventoryPanel {
       </div>
       <div class="equip-row"></div>
       <h2>INVENTORY (${this.items.length}/24)</h2>
-      <div class="hint">click = equip · shift+click = drop · items marked ◆ are unclaimed dungeon loot</div>
+      <div class="hint">click = equip · right-click or shift+click = drop · items marked ◆ are unclaimed dungeon loot</div>
       <div class="inv-grid"></div>
     `;
 
@@ -74,6 +74,11 @@ export class InventoryPanel {
       div.addEventListener('click', (e) => {
         if ((e as MouseEvent).shiftKey) this.onDrop(item.id);
         else this.onEquip(item.id);
+      });
+      // Right-click is the discoverable "drop" — suppress the browser menu.
+      div.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        this.onDrop(item.id);
       });
       grid.appendChild(div);
     }
