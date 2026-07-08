@@ -384,6 +384,292 @@ export function wallPBR(name: 'stone-wall' | 'house-wall' | 'rock'): PbrMaps {
   return maps;
 }
 
+// ------------------------------------------------------- PBR ground tiles
+//
+// Ground surfaces are baked from a procedural height field into full PBR maps
+// (colour + normal + roughness) so floors catch torch- and sunlight with real
+// relief — grass tufts, plank grooves, flagstone joints, rippling water — the
+// same treatment the walls already get.
+
+interface TileSample {
+  h: number; // surface height 0..1 (drives normals + shading)
+  r: number;
+  g: number;
+  b: number;
+  rough: number; // 0 = mirror, 1 = matte
+}
+type TileSampler = (px: number, py: number, S: number) => TileSample;
+
+function bakeDataTex(data: Uint8ClampedArray<ArrayBuffer>, S: number, srgb: boolean): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(S, S);
+  ctx.putImageData(new ImageData(data, S, S), 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  return tex;
+}
+
+/** Bake a sampler into tileable colour/normal/roughness maps. */
+function heightFieldPBR(S: number, sampler: TileSampler, normalStrength: number): PbrMaps {
+  const height = new Float32Array(S * S);
+  const color = new Uint8ClampedArray(S * S * 4);
+  const rough = new Uint8ClampedArray(S * S * 4);
+  const normal = new Uint8ClampedArray(S * S * 4);
+
+  for (let py = 0; py < S; py++) {
+    for (let px = 0; px < S; px++) {
+      const i = py * S + px;
+      const o = i * 4;
+      const s = sampler(px, py, S);
+      height[i] = s.h;
+      color[o] = s.r;
+      color[o + 1] = s.g;
+      color[o + 2] = s.b;
+      color[o + 3] = 255;
+      const rg = Math.max(0, Math.min(1, s.rough)) * 255;
+      rough[o] = rough[o + 1] = rough[o + 2] = rg;
+      rough[o + 3] = 255;
+    }
+  }
+  // Normals from the wrapped height gradient (seamless because height tiles).
+  for (let py = 0; py < S; py++) {
+    for (let px = 0; px < S; px++) {
+      const o = (py * S + px) * 4;
+      const xw = (px + 1) % S;
+      const xe = (px - 1 + S) % S;
+      const yn = (py + 1) % S;
+      const ys = (py - 1 + S) % S;
+      const dx = (height[py * S + xe] - height[py * S + xw]) * normalStrength;
+      const dy = (height[ys * S + px] - height[yn * S + px]) * normalStrength;
+      const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
+      normal[o] = (dx * inv * 0.5 + 0.5) * 255;
+      normal[o + 1] = (dy * inv * 0.5 + 0.5) * 255;
+      normal[o + 2] = (inv * 0.5 + 0.5) * 255;
+      normal[o + 3] = 255;
+    }
+  }
+  return {
+    map: bakeDataTex(color, S, true),
+    normalMap: bakeDataTex(normal, S, false),
+    roughnessMap: bakeDataTex(rough, S, false),
+  };
+}
+
+const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/** Procedural PBR maps for one ground tile type. Falls back to a bumpy generic. */
+function generateTilePBR(name: string): PbrMaps {
+  const S = 128;
+  switch (name) {
+    case 'grass': {
+      const coarse = makeValueNoise(0x6a71, 16);
+      const fine = makeValueNoise(0x6a72, 64);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const patch = coarse((px / S) * 16, (py / S) * 16); // slow colour drift
+          const blade = fine((px / S) * 64, (py / S) * 64);
+          // upright blades: brighten where a "blade" stands, darken the gaps
+          const bladeMask = Math.pow(fine((px / S) * 64 + 3.1, (py / S) * 64), 1.5);
+          const g = mix(74, 118, patch) + bladeMask * 26;
+          const r = mix(40, 70, patch) + bladeMask * 12;
+          const b = mix(24, 44, patch) + bladeMask * 8;
+          return { h: blade * 0.6 + bladeMask * 0.4, r, g, b, rough: 0.9 - bladeMask * 0.08 };
+        },
+        2.2
+      );
+    }
+    case 'wood-floor': {
+      const grain = makeValueNoise(0x00d, 64);
+      const plankShade = rand(0x0d0d);
+      const shades: number[] = [];
+      for (let i = 0; i < 8; i++) shades.push(0.82 + plankShade() * 0.3);
+      const plankH = S / 8; // 8 planks
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const plank = Math.floor(py / plankH);
+          const withinY = py - plank * plankH;
+          const groove = withinY < 1.5 || withinY > plankH - 1.5; // gap between planks
+          const nail = (px % 40 < 2 && (withinY < 3 || withinY > plankH - 4)) ? 0.5 : 0;
+          const g = grain((px / S) * 8, (py / S) * 64); // long horizontal grain
+          const shade = shades[plank] * (0.82 + g * 0.3);
+          const base = groove ? 0.4 : 1;
+          return {
+            h: groove ? 0.1 : 0.55 + g * 0.3 + nail,
+            r: 105 * shade * base + nail * 40,
+            g: 76 * shade * base + nail * 30,
+            b: 46 * shade * base + nail * 16,
+            rough: groove ? 0.9 : 0.55,
+          };
+        },
+        2.4
+      );
+    }
+    case 'dungeon-floor': {
+      const cells = makeValueNoise(0xf100, 32);
+      const crack = makeValueNoise(0xf101, 64);
+      const cellW = S / 4; // 4x4 flagstones
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const cx = px % cellW;
+          const cy = py % cellW;
+          const joint = cx < 2 || cy < 2; // mortar joints between flagstones
+          const stone = cells(Math.floor(px / cellW) * 3.7, Math.floor(py / cellW) * 2.3);
+          const grime = crack((px / S) * 64, (py / S) * 64);
+          const crackLine = grime > 0.82 ? 0.5 : 1; // hairline cracks
+          const shade = (0.7 + stone * 0.45) * crackLine;
+          return {
+            h: joint ? 0.05 : (0.5 + grime * 0.3) * crackLine,
+            r: mix(40, 62, stone) * (joint ? 0.5 : shade),
+            g: mix(37, 57, stone) * (joint ? 0.5 : shade),
+            b: mix(50, 74, stone) * (joint ? 0.5 : shade),
+            rough: joint ? 0.95 : 0.72,
+          };
+        },
+        2.6
+      );
+    }
+    case 'road': {
+      const dirt = makeValueNoise(0x0aad, 64);
+      const pebble = makeValueNoise(0x0aae, 32);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const d = dirt((px / S) * 64, (py / S) * 64);
+          const p = pebble((px / S) * 32, (py / S) * 32);
+          const isPebble = p > 0.74;
+          const shade = 0.8 + d * 0.4;
+          return {
+            h: isPebble ? 0.6 + p * 0.4 : d * 0.35,
+            r: (isPebble ? 150 : 110) * shade,
+            g: (isPebble ? 130 : 91) * shade,
+            b: (isPebble ? 104 : 64) * shade,
+            rough: isPebble ? 0.6 : 0.85,
+          };
+        },
+        2.4
+      );
+    }
+    case 'water': {
+      const ripple = makeValueNoise(0x7a7e, 32);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const u = (px / S) * Math.PI * 2;
+          const v = (py / S) * Math.PI * 2;
+          // two crossing wave trains + noise = interference ripples
+          const wave = Math.sin(u * 3 + Math.sin(v * 2)) * 0.5 + Math.sin(v * 4 - u) * 0.5;
+          const n = ripple((px / S) * 32, (py / S) * 32);
+          const crest = clamp01(0.5 + wave * 0.35 + n * 0.15);
+          return {
+            h: crest,
+            r: mix(24, 60, crest),
+            g: mix(58, 108, crest),
+            b: mix(92, 150, crest),
+            rough: 0.12 + n * 0.05, // glossy — catches sun + torch highlights
+          };
+        },
+        3.2
+      );
+    }
+    case 'rock': {
+      const n = makeValueNoise(0x50c, 64);
+      const n2 = makeValueNoise(0x50d, 32);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const a = n((px / S) * 64, (py / S) * 64);
+          const b = n2((px / S) * 32, (py / S) * 32);
+          const h = a * 0.6 + b * 0.4;
+          const shade = 0.7 + h * 0.5;
+          return { h, r: 92 * shade, g: 89 * shade, b: 83 * shade, rough: 0.85 };
+        },
+        2.8
+      );
+    }
+    case 'stairs': {
+      const n = makeValueNoise(0x57a, 32);
+      const stepH = S / 8;
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const within = py % stepH;
+          const step = Math.floor(py / stepH);
+          const edge = within < 2; // shadowed lip of each step
+          const wear = n((px / S) * 32, (py / S) * 32);
+          const rise = within / stepH; // brighter toward the front of the tread
+          const shade = (0.5 + rise * 0.5) * (0.8 + wear * 0.3);
+          return {
+            h: edge ? 0.1 : 0.4 + rise * 0.5,
+            r: 46 * shade + step * 1.5,
+            g: 41 * shade,
+            b: 54 * shade,
+            rough: edge ? 0.9 : 0.7,
+          };
+        },
+        3.0
+      );
+    }
+    case 'portal-pad': {
+      const n = makeValueNoise(0x90a1, 32);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const dx = px - S / 2;
+          const dy = py - S / 2;
+          const rad = Math.sqrt(dx * dx + dy * dy) / (S / 2);
+          const ring = Math.abs(Math.sin(rad * 10)) > 0.86 && rad < 0.95; // glowing rune rings
+          const g = n((px / S) * 32, (py / S) * 32);
+          const shade = 0.6 + g * 0.4;
+          return {
+            h: 0.4 + g * 0.2,
+            r: (ring ? 150 : 58) * shade,
+            g: (ring ? 100 : 44) * shade,
+            b: (ring ? 220 : 92) * shade,
+            rough: ring ? 0.3 : 0.55, // runes read as polished, glossy inlay
+          };
+        },
+        1.6
+      );
+    }
+    default: {
+      const n = makeValueNoise(0x0fa11, 64);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const a = n((px / S) * 64, (py / S) * 64);
+          const s = 0.75 + a * 0.4;
+          return { h: a, r: 90 * s, g: 88 * s, b: 96 * s, rough: 0.8 };
+        },
+        2.2
+      );
+    }
+  }
+}
+
+/** Ground tiles that ship full PBR relief. Others fall back to flat colour. */
+const PBR_TILES = new Set(['grass', 'road', 'water', 'wood-floor', 'dungeon-floor', 'rock', 'stairs', 'portal-pad']);
+const tilePbrCache = new Map<string, PbrMaps>();
+
+export function hasTilePBR(name: string): boolean {
+  return PBR_TILES.has(name);
+}
+
+export function tilePBR(name: string): PbrMaps {
+  let maps = tilePbrCache.get(name);
+  if (!maps) {
+    maps = generateTilePBR(name);
+    tilePbrCache.set(name, maps);
+  }
+  return maps;
+}
+
 // ---------------------------------------------------------------- tiles
 
 const tileCache = new Map<string, THREE.Texture>();

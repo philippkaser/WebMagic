@@ -102,9 +102,12 @@ to disable the `/goto` and `/xp` dev commands.
   flash of light and splash damage, portals glow, rare loot shines. Walls use
   real stone artwork (`client/public/textures/stone-wall.jpg`) turned into full PBR
   materials at load — normal and roughness maps are derived from the image, with
-  tinted variants for house masonry and rock and a procedural fallback — and
-  the overworld runs a full day/night cycle with a travelling sun, moonlight, a
-  starfield and an in-game clock.
+  tinted variants for house masonry and rock and a procedural fallback. The
+  **ground is PBR too**: grass tufts, plank grooves, flagstone joints, packed-dirt
+  roads, rippling glossy water and glowing portal runes are each baked from a
+  procedural height field into colour + normal + roughness maps, so floors catch
+  torch- and sunlight with real relief. The overworld runs a full day/night cycle
+  with a travelling sun, moonlight, a starfield and an in-game clock.
 - **Resilience** — the public HTTP surface survives malformed requests, the tick loop
   and process are guarded against stray exceptions, and the client reconnects and
   logs back in automatically if the connection drops.

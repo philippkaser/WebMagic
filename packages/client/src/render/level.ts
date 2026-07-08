@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TILE_SIZE, Tile, TileMap, isBlocking, isWallLike } from '@webmagic/shared';
-import { spriteDef, tileTexture, wallPBR } from './textures';
+import { hasTilePBR, spriteDef, tilePBR, tileTexture, wallPBR } from './textures';
 
 export const WALL_HEIGHT = 3.2;
 
@@ -71,10 +71,28 @@ export class LevelMesh {
       }
     }
 
-    // --- floor meshes
+    // --- floor meshes: PBR relief (grass tufts, plank grooves, water ripples…)
+    // where available, flat colour otherwise.
     for (const [texName, tiles] of floorBuckets) {
       const geo = buildFloorGeometry(tiles, 0);
-      const mat = new THREE.MeshLambertMaterial({ map: tileTexture(texName) });
+      let mat: THREE.Material;
+      if (hasTilePBR(texName)) {
+        const pbr = tilePBR(texName);
+        const shiny = texName === 'water' || texName === 'portal-pad';
+        mat = new THREE.MeshStandardMaterial({
+          map: pbr.map,
+          normalMap: pbr.normalMap,
+          roughnessMap: pbr.roughnessMap,
+          roughness: 1,
+          metalness: 0,
+          normalScale: new THREE.Vector2(shiny ? 1.5 : 1, shiny ? 1.5 : 1),
+          emissive: texName === 'portal-pad' ? new THREE.Color(0x2a1550) : new THREE.Color(0x000000),
+          emissiveMap: texName === 'portal-pad' ? pbr.map : null,
+          emissiveIntensity: texName === 'portal-pad' ? 0.4 : 1,
+        });
+      } else {
+        mat = new THREE.MeshLambertMaterial({ map: tileTexture(texName) });
+      }
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
       this.group.add(mesh);
