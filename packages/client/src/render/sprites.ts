@@ -18,6 +18,14 @@ interface SpriteInstance {
  * mean sprites react to torch light and spells; emissive things (portals,
  * bolts, glowing loot) use basic materials so they shine in the dark.
  */
+/** NPC/monster types that get per-entity palette variants for crowd variety. */
+const VARIED = new Set(['villager', 'guard', 'caravan-guard', 'goblin', 'orc', 'skeleton', 'imp', 'ogre']);
+
+/** Stable sprite key: adds a palette-variant suffix for varied crowd types. */
+function spriteKey(variant: string, id: number): string {
+  return VARIED.has(variant) ? `${variant}#${id % 4}` : variant;
+}
+
 export class EntitySprites {
   readonly group = new THREE.Group();
   private instances = new Map<number, SpriteInstance>();
@@ -27,20 +35,21 @@ export class EntitySprites {
 
     for (const [id, e] of state.entities) {
       seen.add(id);
+      const key = spriteKey(e.latest.v, id);
       let inst = this.instances.get(id);
-      if (inst && inst.variant !== e.latest.v) {
+      if (inst && inst.variant !== key) {
         this.removeInstance(id);
         inst = undefined;
       }
       if (!inst) {
-        const def = spriteDef(e.latest.v);
+        const def = spriteDef(key);
         const geo = new THREE.PlaneGeometry(def.w, def.h);
         const mat = def.emissive
           ? new THREE.MeshBasicMaterial({ map: def.texture, transparent: true, alphaTest: 0.05, depthWrite: false })
           : new THREE.MeshLambertMaterial({ map: def.texture, alphaTest: 0.5, side: THREE.DoubleSide });
         const mesh = new THREE.Mesh(geo, mat);
         this.group.add(mesh);
-        inst = { mesh, mat, variant: e.latest.v, h: def.h, flashUntil: 0, views: def.views };
+        inst = { mesh, mat, variant: key, h: def.h, flashUntil: 0, views: def.views };
         this.instances.set(id, inst);
       }
 

@@ -109,7 +109,9 @@ to disable the `/goto` and `/xp` dev commands.
   traps** that bite grounded heroes, so time a jump to cross them unharmed.
 - **Doom-style rendering** — low-res upscaled framebuffer, billboard pixel sprites lit
   by the scene (humanoids are **4-directional** — front/back/side views chosen from
-  their facing relative to the camera), merged tile geometry, fog, and a pooled
+  their facing relative to the camera — drawn at higher resolution with two-tone
+  shading, and recoloured per-entity so crowds of villagers, guards and monsters
+  vary), merged tile geometry, fog, and a pooled
   dynamic light system: torches
   flicker, firebolts light up corridors as they fly, explode on impact with a real
   flash of light and splash damage, portals glow, rare loot shines. Walls use

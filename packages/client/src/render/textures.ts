@@ -768,76 +768,138 @@ interface HumanoidLook {
 
 type Orient = 'front' | 'back' | 'side';
 
-function drawWeapon(px: PixelFn, weapon: HumanoidLook['weapon'], side: 'front' | 'back'): void {
-  const hidden = side === 'back';
+/** Multiply a #rrggbb colour by per-channel factors (for shading + tinting). */
+function shade(hex: string, r: number, g = r, b = r): string {
+  const n = parseInt(hex.slice(1), 16);
+  const cl = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  const R = cl(((n >> 16) & 255) * r);
+  const G = cl(((n >> 8) & 255) * g);
+  const B = cl((n & 255) * b);
+  return `#${((R << 16) | (G << 8) | B).toString(16).padStart(6, '0')}`;
+}
+
+/** A recoloured look for crowd variety (shifts clothing, keeps skin). */
+function varyLook(look: HumanoidLook, index: number): HumanoidLook {
+  const tints: [number, number, number][] = [
+    [1, 1, 1],
+    [1.18, 0.9, 0.8], // warmer
+    [0.82, 0.95, 1.2], // cooler
+    [0.9, 1.12, 0.86], // greener
+  ];
+  const [tr, tg, tb] = tints[index % tints.length];
+  return {
+    ...look,
+    cloth: shade(look.cloth, tr, tg, tb),
+    clothDark: shade(look.clothDark, tr, tg, tb),
+    hat: look.hat ? shade(look.hat, tr, tg, tb) : undefined,
+  };
+}
+
+const BOOTS = '#2e2016';
+const BELT = '#4a3420';
+const BUCKLE = '#c8a850';
+
+// Higher-resolution humanoid: drawn on a 28x40 grid with two-tone shading.
+function drawWeaponHi(px: PixelFn, weapon: HumanoidLook['weapon'], onRight: boolean): void {
+  const wx = onRight ? 24 : 2; // hand x for front(right)/back(left)
+  const blade = onRight ? '#d0d0d8' : '#9a9aa2';
   switch (weapon) {
     case 'sword':
-      px(13, 8, 1, 9, hidden ? '#9a9aa2' : '#c8c8d0');
-      px(12, 15, 3, 1, '#8a6d3b');
+      px(wx, 8, 2, 18, blade);
+      px(wx - 2, 24, 6, 2, '#8a6d3b');
+      px(wx, 26, 2, 4, '#6b4a2a');
       break;
     case 'staff':
-      px(13, 5, 1, 13, '#7a5c38');
-      px(12, 3, 3, 3, hidden ? '#3a7a9a' : '#66ccff');
+      px(wx, 5, 2, 24, '#7a5c38');
+      px(wx - 2, 2, 6, 5, onRight ? '#66ccff' : '#3a7a9a');
       break;
     case 'spear':
-      px(13, 3, 1, 15, '#8a6d4b');
-      px(12, 2, 3, 2, '#c8c8d0');
+      px(wx, 3, 2, 27, '#8a6d4b');
+      px(wx - 2, 1, 6, 4, '#c8c8d0');
       break;
     case 'club':
-      px(13, 9, 2, 8, '#6b4a2a');
+      px(wx - 1, 14, 5, 15, '#6b4a2a');
+      px(wx - 1, 14, 5, 5, '#5a3d22');
       break;
   }
 }
 
 function drawHumanoid(look: HumanoidLook, orient: Orient = 'front'): HTMLCanvasElement {
-  const [c, px] = pixelPainter();
+  const [c, px] = pixelPainter(28, 40);
   const { skin, cloth, clothDark } = look;
+  const skinD = shade(skin, 0.8);
+  const skinL = shade(skin, 1.1);
+  const clothL = shade(cloth, 1.2);
   const hair = look.hat ?? '#3a2a1a';
 
   if (orient === 'side') {
-    // Profile facing right (mirrored for left elsewhere).
-    px(7, 19, 2, 5, clothDark); // striding leg
-    px(5, 11, 6, 8, cloth); // torso (narrower, shifted)
-    px(5, 11, 2, 8, clothDark);
-    px(7, 12, 2, 5, skin); // forward arm
-    px(6, 4, 5, 6, skin); // head
-    px(9, 6, 1, 1, look.eyes ?? '#1a1a1a'); // one eye, forward
-    px(5, 3, 5, 2, hair); // hair/hat over the crown + back
-    if (look.hat) px(5, 2, 4, 1, look.hat);
-    // weapon thrust forward
+    // Profile facing right (mirrored for the opposite direction).
+    px(12, 30, 4, 8, clothDark); // near leg
+    px(12, 38, 4, 2, BOOTS);
+    px(9, 16, 9, 14, cloth); // torso
+    px(9, 16, 3, 14, clothDark);
+    px(7, 28, 11, 2, BELT);
+    px(13, 18, 3, 10, cloth); // forward arm
+    px(13, 28, 3, 2, skin); // hand
+    px(10, 5, 9, 11, skin); // head
+    px(10, 5, 3, 11, skinD);
+    px(19, 9, 1, 3, skin); // nose
+    px(16, 10, 2, 2, look.eyes ?? '#241a12'); // eye
+    px(11, 13, 4, 1, skinD); // mouth
+    px(9, 4, 9, 4, hair); // hair crown + back
+    px(9, 4, 2, 8, hair);
+    if (look.hat) px(9, 2, 9, 3, look.hat);
     if (look.weapon && look.weapon !== 'none') {
-      px(11, 6, 1, 11, look.weapon === 'staff' ? '#7a5c38' : '#b8b8c0');
-      if (look.weapon === 'staff') px(10, 4, 3, 3, '#66ccff');
+      px(20, 5, 2, 22, look.weapon === 'staff' ? '#7a5c38' : '#c8c8d0'); // held forward
+      if (look.weapon === 'staff') px(18, 2, 5, 5, '#66ccff');
     }
     return c;
   }
 
-  // legs
-  px(5, 19, 2, 5, clothDark);
-  px(9, 19, 2, 5, clothDark);
-  // torso
-  px(4, 11, 8, 8, cloth);
-  px(4, 11, 2, 8, clothDark);
-  // arms
-  px(3, 12, 1, 5, skin);
-  px(12, 12, 1, 5, skin);
+  const back = orient === 'back';
+  // legs + boots
+  px(9, 30, 4, 8, clothDark);
+  px(15, 30, 4, 8, clothDark);
+  px(9, 38, 4, 2, BOOTS);
+  px(15, 38, 4, 2, BOOTS);
+  // torso with shaded/lit sides
+  px(7, 16, 14, 14, cloth);
+  px(7, 16, 4, 14, clothDark); // shadow side
+  px(19, 17, 2, 12, clothL); // highlight edge
+  // belt
+  px(7, 28, 14, 2, BELT);
+  if (!back) px(13, 28, 2, 2, BUCKLE);
+  // arms + hands
+  px(4, 17, 3, 10, cloth);
+  px(4, 17, 2, 10, clothDark);
+  px(4, 27, 3, 3, skin);
+  px(21, 17, 3, 10, cloth);
+  px(21, 27, 3, 3, skin);
+  // neck
+  px(12, 14, 4, 2, skinD);
   // head
-  px(5, 4, 6, 6, orient === 'back' ? hair : skin);
-  if (orient === 'front') {
-    px(6, 6, 1, 1, look.eyes ?? '#1a1a1a');
-    px(9, 6, 1, 1, look.eyes ?? '#1a1a1a');
-  } else {
-    px(5, 4, 6, 3, hair); // back of the head is hair
+  px(9, 5, 10, 11, back ? hair : skin);
+  if (!back) {
+    px(9, 5, 3, 11, skinD); // face shadow
+    px(17, 6, 2, 8, skinL); // face highlight
+    px(11, 10, 2, 2, look.eyes ?? '#241a12');
+    px(15, 10, 2, 2, look.eyes ?? '#241a12');
+    px(12, 13, 4, 1, skinD); // mouth
   }
+  // hair
+  px(8, 4, 12, back ? 6 : 4, hair);
+  px(8, 4, 2, 8, hair);
+  px(18, 4, 2, 8, hair);
   if (look.hat) {
-    px(4, 2, 8, 3, look.hat);
-    px(5, 1, 6, 1, look.hat);
+    px(8, 2, 12, 4, look.hat);
+    px(9, 1, 10, 1, look.hat);
   }
   // weapon + shield swap sides when seen from behind
-  drawWeapon(px, look.weapon, orient === 'back' ? 'back' : 'front');
+  drawWeaponHi(px, look.weapon, !back);
   if (look.shield) {
-    px(1, 12, 3, 5, '#8a8a96');
-    px(2, 13, 1, 3, '#d8b45a');
+    const sx = back ? 22 : 2;
+    px(sx, 17, 4, 9, '#8a8a96');
+    px(sx + 1, 19, 2, 4, '#d8b45a');
   }
   return c;
 }
@@ -993,30 +1055,35 @@ export function spriteDef(variant: string): SpriteDef {
   let def = spriteCache.get(variant);
   if (def) return def;
 
+  // Palette variants come in as "base#index" (crowd variety); split them.
+  const hash = variant.indexOf('#');
+  const base = hash >= 0 ? variant.slice(0, hash) : variant;
+  const variantIndex = hash >= 0 ? Number(variant.slice(hash + 1)) || 0 : 0;
+
   let canvas: HTMLCanvasElement;
   let w = 1.4;
   let h = 2.1;
   let emissive = false;
   let views: SpriteDef['views'];
 
-  if (variant in LOOK) {
+  if (base in LOOK) {
     // Directional: front/back/side billboards picked by facing vs. camera.
-    const look = LOOK[variant];
+    const look = varyLook(LOOK[base], variantIndex);
     canvas = drawHumanoid(look, 'front');
     views = {
       front: toTexture(canvas, false),
       back: toTexture(drawHumanoid(look, 'back'), false),
       side: toTexture(drawHumanoid(look, 'side'), false),
     };
-    if (variant === 'ogre') { w = 2.2; h = 3.3; }
-    if (variant === 'goblin' || variant === 'imp') { w = 1.1; h = 1.65; }
-  } else if (variant in RARITY_GLOW) {
-    canvas = drawLootBag(RARITY_GLOW[variant]);
+    if (base === 'ogre') { w = 2.2; h = 3.3; }
+    if (base === 'goblin' || base === 'imp') { w = 1.1; h = 1.65; }
+  } else if (base in RARITY_GLOW) {
+    canvas = drawLootBag(RARITY_GLOW[base]);
     w = 0.8;
     h = 0.8;
-    emissive = variant !== 'common';
+    emissive = base !== 'common';
   } else {
-    switch (variant) {
+    switch (base) {
       case 'wolf':
         canvas = drawWolf();
         w = 1.8;
