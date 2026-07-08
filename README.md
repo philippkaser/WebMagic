@@ -73,8 +73,9 @@ to disable the `/goto` and `/xp` dev commands.
 ## What's in the game right now
 
 - **Movement with feel** — sprint with a stamina budget, free-look mouse camera, and a
-  jump whose flavor depends on your class (Knight charge-jump, Wizard hover, Warrior
-  double-jump). Vertical motion and stamina run through one shared physics module
+  jump whose flavor depends on your class (Knight charge-jump, Warrior double-jump,
+  and a Wizard who catches the air to **glide a long way on a slow fall, trailing
+  purple arcane motes and light**). Vertical motion and stamina run through one shared physics module
   (`shared/movement.ts`) simulated identically on client and server, so your own jumps
   feel instant and other players see them too.
 - **Three classes** — Warrior, Wizard, Knight — each with a passive, a primary attack
@@ -109,7 +110,8 @@ to disable the `/goto` and `/xp` dev commands.
   **ground is PBR too**: grass tufts, plank grooves, flagstone joints, packed-dirt
   roads, rippling glossy water and glowing portal runes are each baked from a
   procedural height field into colour + normal + roughness maps, so floors catch
-  torch- and sunlight with real relief. The overworld runs a full day/night cycle
+  torch- and sunlight with real relief. Water surfaces are **animated** — their
+  colour and ripple-normal maps scroll so the surface flows. The overworld runs a full day/night cycle
   with a travelling sun, moonlight, a starfield and an in-game clock. A pooled
   particle system throws embers from fireball blasts and hits, and kicks up dust
   when a jump lands. Combat and movement have **game feel**: a trauma-based screen

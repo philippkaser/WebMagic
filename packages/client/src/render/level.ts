@@ -14,6 +14,8 @@ const WALL_TEX_SCALE = 1.8;
 export class LevelMesh {
   readonly group = new THREE.Group();
   private disposables: (THREE.BufferGeometry | THREE.Material | THREE.InstancedMesh)[] = [];
+  /** Water colour + normal maps, scrolled each frame for a flowing surface. */
+  private waterMaps: THREE.Texture[] = [];
 
   build(map: TileMap, kind: 'overworld' | 'dungeon'): void {
     const floorBuckets = new Map<string, number[]>(); // texture -> positions of tile quads
@@ -84,6 +86,7 @@ export class LevelMesh {
       if (hasTilePBR(texName)) {
         const pbr = tilePBR(texName);
         const shiny = texName === 'water' || texName === 'portal-pad';
+        if (texName === 'water') this.waterMaps = [pbr.map, pbr.normalMap];
         mat = new THREE.MeshStandardMaterial({
           map: pbr.map,
           normalMap: pbr.normalMap,
@@ -189,9 +192,18 @@ export class LevelMesh {
     }
   }
 
+  /** Scroll the water maps so the surface ripples flow. `t` in seconds. */
+  animate(t: number): void {
+    const [map, nrm] = this.waterMaps;
+    if (!map) return;
+    map.offset.set((t * 0.018) % 1, (t * 0.011) % 1);
+    nrm.offset.set((t * 0.03) % 1, (-t * 0.022) % 1); // ripples drift across the colour flow
+  }
+
   dispose(): void {
     for (const d of this.disposables) d.dispose();
     this.disposables = [];
+    this.waterMaps = [];
     this.group.clear();
   }
 }

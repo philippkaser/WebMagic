@@ -142,7 +142,7 @@ export class GameRenderer {
     }
   }
 
-  render(state: WorldState, input: Input, now: number, dt: number, moving: boolean, camZ = 0): void {
+  render(state: WorldState, input: Input, now: number, dt: number, moving: boolean, camZ = 0, hoverGlow = false): void {
     const isDungeon = state.zone?.kind === 'dungeon';
 
     // --- day/night atmosphere
@@ -225,6 +225,10 @@ export class GameRenderer {
         seed: e.latest.id % 100,
       });
     }
+    // A hovering wizard trails a bright purple arcane light.
+    if (hoverGlow) {
+      dynamics.push({ x: state.x, y: state.y, height: 1.3 + camZ, color: 0x9a4dff, intensity: 9, range: 12, flicker: 0.25, seed: 7 });
+    }
     this.lights.update(state.x, state.y, now / 1000, nightness, dynamics, {
       x: state.x,
       y: state.y,
@@ -238,6 +242,7 @@ export class GameRenderer {
       f.scale.set(s, lerp(1, s, 0.5), 1);
     }
 
+    this.level?.animate(now * 0.001); // flowing water
     this.fx.update(dt, this.camera, window.innerWidth, window.innerHeight);
     this.renderer.render(this.scene, this.camera);
   }

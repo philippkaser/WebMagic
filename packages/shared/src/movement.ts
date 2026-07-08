@@ -24,10 +24,11 @@ export const KNIGHT_MAX_CHARGE_MS = 850;
 export const KNIGHT_CHARGE_BONUS = 1.95; // takeoff multiplier at full charge
 export const KNIGHT_CHARGE_SLOW = 0.4; // move-speed factor while charging
 
-// Wizard: hold jump in the air to hover on a slow fall.
-export const MAGE_HOVER_MS = 1500;
-export const MAGE_HOVER_GRAVITY = 4;
-export const MAGE_HOVER_FALL = -1.4; // capped gentle descent while hovering, m/s
+// Wizard: hold jump in the air to hover on a slow fall, gliding a long way.
+export const MAGE_HOVER_MS = 2800;
+export const MAGE_HOVER_GRAVITY = 3;
+export const MAGE_HOVER_FALL = -0.9; // capped gentle descent while hovering, m/s
+export const MAGE_GLIDE_MULT = 1.6; // horizontal speed boost while hovering
 
 // Warrior: one extra mid-air jump.
 export const WARRIOR_AIR_JUMPS = 1;
@@ -47,6 +48,11 @@ export function newVerticalState(): VerticalState {
 
 export function isCharging(v: VerticalState): boolean {
   return v.chargeStart > 0;
+}
+
+/** True while a wizard is actively hovering (airborne, holding, past the rise). */
+export function isHovering(v: VerticalState, cls: ClassId, now: number): boolean {
+  return cls === 'wizard' && !v.grounded && v.hoverUntil > now && v.vz <= 0.5;
 }
 
 /** Jump key pressed. `now` is ms. Mutates `v`. */
@@ -84,7 +90,7 @@ function launch(v: VerticalState, speed: number, extra = false): void {
 /** Advance vertical physics by `dt` seconds. `now` is ms. */
 export function stepVertical(v: VerticalState, cls: ClassId, now: number, dt: number): void {
   if (v.chargeStart > 0 || v.grounded) return; // crouched charging or already on the ground
-  const hovering = cls === 'wizard' && v.hoverUntil > now && v.vz <= 0.5;
+  const hovering = isHovering(v, cls, now);
   if (hovering) {
     // Reduced gravity, but the fall is also capped so the mage floats gently
     // down no matter how fast it was dropping when hover kicked in.
@@ -108,8 +114,14 @@ export function stepStamina(stamina: number, sprinting: boolean, dt: number): nu
   return next < 0 ? 0 : next > STAMINA_MAX ? STAMINA_MAX : next;
 }
 
-/** Horizontal speed multiplier from sprint + knight charge state. */
-export function speedMultiplier(sprinting: boolean, stamina: number, charging: boolean): number {
+/** Horizontal speed multiplier from sprint / knight charge / wizard glide. */
+export function speedMultiplier(
+  sprinting: boolean,
+  stamina: number,
+  charging: boolean,
+  hovering = false
+): number {
   if (charging) return KNIGHT_CHARGE_SLOW;
+  if (hovering) return MAGE_GLIDE_MULT; // wizards glide fast and far while hovering
   return sprinting && stamina > 0 ? SPRINT_MULT : 1;
 }

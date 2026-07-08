@@ -20,6 +20,7 @@ import {
   STAMINA_MAX,
   TICK_MS,
   isCharging,
+  isHovering,
   jumpPress,
   jumpRelease,
   speedMultiplier,
@@ -553,7 +554,12 @@ export class GameServer implements AiHost {
       if (!stunned) {
         const zone = this.zoneById(player.zoneId);
         if (zone) {
-          const gamefeel = speedMultiplier(sprint, player.stamina, isCharging(player.vert));
+          const gamefeel = speedMultiplier(
+            sprint,
+            player.stamina,
+            isCharging(player.vert),
+            isHovering(player.vert, player.classId, now)
+          );
           const speed = player.stats.moveSpeed * slowed * gamefeel;
           zone.moveEntity(ent, mx * speed * dt, my * speed * dt);
           ent.anim = 'move';

@@ -6,6 +6,7 @@ import {
   STAMINA_MAX,
   ServerMessage,
   isCharging,
+  isHovering,
   jumpPress,
   jumpRelease,
   newVerticalState,
@@ -91,6 +92,7 @@ function startGame(
   let localStam = STAMINA_MAX;
   let wasGrounded = true;
   let peakAir = 0; // track fall height so only real landings kick up dust
+  let hoverFxAt = 0; // throttle for hover particles
 
   // ---- input wiring
   input.isTyping = () => chat.isOpen;
@@ -286,9 +288,15 @@ function startGame(
     }
     if (vert.grounded) peakAir = 0;
     wasGrounded = vert.grounded;
-    const sprinting = input.sprinting && moving && localStam > 0 && !isCharging(vert);
+    const hovering = isHovering(vert, classId, now);
+    const sprinting = input.sprinting && moving && localStam > 0 && !isCharging(vert) && !hovering;
     localStam = stepStamina(localStam, sprinting, dt);
-    const spdMul = speedMultiplier(sprinting, localStam, isCharging(vert));
+    const spdMul = speedMultiplier(sprinting, localStam, isCharging(vert), hovering);
+    // Arcane wake: purple motes stream off a hovering wizard.
+    if (hovering && now - hoverFxAt > 55) {
+      hoverFxAt = now;
+      renderer.fx.magicTrail(state.x, state.y);
+    }
 
     const chunk = state.move(mx, my, dt, spdMul);
     if (chunk) {
@@ -309,7 +317,7 @@ function startGame(
     }
 
     hud.update(state, now, localStam);
-    renderer.render(state, input, now, dt, moving, vert.z);
+    renderer.render(state, input, now, dt, moving, vert.z, hovering);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);

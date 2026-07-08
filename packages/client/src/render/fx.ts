@@ -152,6 +152,11 @@ export class FxManager {
     this.spawnBurst(x, 0.15, z, 10, 0xb9a888, { speed: 2.2, size: 0.35, ttl: 0.5, gravity: 1.5, drag: 3.5, soft: true });
   }
 
+  /** Rising purple motes — a hovering wizard's arcane wake. */
+  magicTrail(x: number, z: number): void {
+    this.spawnBurst(x, 0.9, z, 3, 0xb060ff, { speed: 1.1, size: 0.3, ttl: 0.75, gravity: -0.5, drag: 1.8 });
+  }
+
   update(dt: number, camera: THREE.Camera, width: number, height: number): void {
     const v = new THREE.Vector3();
     for (let i = this.texts.length - 1; i >= 0; i--) {
