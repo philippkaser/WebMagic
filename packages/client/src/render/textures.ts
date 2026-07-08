@@ -981,59 +981,82 @@ function drawPortal(color1: string, color2: string): HTMLCanvasElement {
   return c;
 }
 
-/** A high-res swirling vortex for portals — bright core, spiral arms. */
-function drawPortalSwirl(inner: string, arm: string): HTMLCanvasElement {
-  const S = 160;
+/** Parse "#rrggbb" to [r,g,b]. */
+function rgbOf(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/**
+ * A low-res, chunky-pixel portal face: concentric wave bands rippling out from
+ * a bright core. Drawn on a tiny grid with NearestFilter so it matches the
+ * game's pixel-art look (no smooth gradients).
+ */
+function drawPortalWaves(inner: string, outer: string, phase: number): HTMLCanvasElement {
+  const S = 40; // chunky pixel grid
   const [c, ctx] = makeCanvas(S, S);
-  const cx = S / 2;
-  const cy = S / 2;
-  // glowing core
-  const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, S / 2);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.18, inner);
-  g.addColorStop(0.6, arm);
-  g.addColorStop(1, arm + '00');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(cx, cy, S / 2, 0, Math.PI * 2);
-  ctx.fill();
-  // spiral arms drawn additively
-  ctx.globalCompositeOperation = 'lighter';
-  const arms = 4;
-  for (let a = 0; a < arms; a++) {
-    ctx.strokeStyle = a % 2 ? '#ffffff' : inner;
-    ctx.lineWidth = 3;
-    ctx.globalAlpha = 0.5;
-    ctx.beginPath();
-    for (let t = 0; t < 1; t += 0.02) {
-      const ang = (a / arms) * Math.PI * 2 + t * Math.PI * 3.2;
-      const r = t * (S / 2 - 4);
-      const x = cx + Math.cos(ang) * r;
-      const y = cy + Math.sin(ang) * r;
-      if (t === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+  const cx = (S - 1) / 2;
+  const cy = (S - 1) / 2;
+  const [ir, ig, ib] = rgbOf(inner);
+  const [or_, og, ob] = rgbOf(outer);
+  const img = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      const r = Math.sqrt(dx * dx + dy * dy) / (S / 2);
+      const o = (y * S + x) * 4;
+      if (r > 1) {
+        img.data[o + 3] = 0;
+        continue;
+      }
+      // concentric waves moving outward (phase animates the band positions)
+      const band = Math.sin(r * Math.PI * 5 - phase * Math.PI * 2);
+      const t = band * 0.5 + 0.5; // 0..1 across a band
+      const core = r < 0.14 ? 1 : 0;
+      const rr = core ? 255 : Math.round(or_ + (ir - or_) * t);
+      const gg = core ? 255 : Math.round(og + (ig - og) * t);
+      const bb = core ? 255 : Math.round(ob + (ib - ob) * t);
+      img.data[o] = rr;
+      img.data[o + 1] = gg;
+      img.data[o + 2] = bb;
+      img.data[o + 3] = Math.round((1 - r) * 255); // fade to the rim
     }
-    ctx.stroke();
   }
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'source-over';
+  ctx.putImageData(img, 0, 0);
   return c;
 }
 
-const portalSwirlCache = new Map<string, THREE.Texture>();
+interface PortalWaveTex {
+  texture: THREE.CanvasTexture;
+  canvas: HTMLCanvasElement;
+  inner: string;
+  outer: string;
+}
+const portalWaveCache = new Map<string, PortalWaveTex>();
 
-/** Cached, spinnable swirl texture for a portal effect. */
-export function portalSwirlTexture(kind: 'portal' | 'portal-exit'): THREE.Texture {
-  let tex = portalSwirlCache.get(kind);
-  if (tex) return tex;
-  const canvas = kind === 'portal-exit'
-    ? drawPortalSwirl('#66ddff', '#2b6fd8')
-    : drawPortalSwirl('#c07bff', '#7a2bd8');
-  tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.center.set(0.5, 0.5); // spin around the middle
-  portalSwirlCache.set(kind, tex);
-  return tex;
+/** Cached pixelated wave texture; call redrawPortalWaves() to animate it. */
+export function portalWaveTexture(kind: 'portal' | 'portal-exit'): PortalWaveTex {
+  let entry = portalWaveCache.get(kind);
+  if (entry) return entry;
+  const [inner, outer] = kind === 'portal-exit' ? ['#9fefff', '#2b6fd8'] : ['#e0b0ff', '#7a2bd8'];
+  const canvas = drawPortalWaves(inner, outer, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.NearestFilter; // chunky pixels, like the rest of the game
+  texture.minFilter = THREE.NearestFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  entry = { texture, canvas, inner, outer };
+  portalWaveCache.set(kind, entry);
+  return entry;
+}
+
+/** Re-render the wave bands at a new phase (ripples flowing outward). */
+export function redrawPortalWaves(entry: PortalWaveTex, phase: number): void {
+  const next = drawPortalWaves(entry.inner, entry.outer, phase);
+  const ctx = entry.canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, entry.canvas.width, entry.canvas.height);
+  ctx.drawImage(next, 0, 0);
+  entry.texture.needsUpdate = true;
 }
 
 function drawOrb(inner: string, outer: string): HTMLCanvasElement {
