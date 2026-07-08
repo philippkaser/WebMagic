@@ -737,12 +737,16 @@ export interface SpriteDef {
   h: number;
   /** Emissive sprites (portals, orbs, flames) ignore scene lighting. */
   emissive: boolean;
+  /** Directional billboards: front/back/side chosen by facing vs. camera. */
+  views?: { front: THREE.Texture; back: THREE.Texture; side: THREE.Texture };
 }
 
 const spriteCache = new Map<string, SpriteDef>();
 
 /** Draw on a 16x24 pixel grid scaled up 4x. */
-function pixelPainter(gw = 16, gh = 24): [HTMLCanvasElement, (x: number, y: number, w: number, h: number, color: string) => void] {
+type PixelFn = (x: number, y: number, w: number, h: number, color: string) => void;
+
+function pixelPainter(gw = 16, gh = 24): [HTMLCanvasElement, PixelFn] {
   const scale = 4;
   const [c, ctx] = makeCanvas(gw * scale, gh * scale);
   const px = (x: number, y: number, w: number, h: number, color: string) => {
@@ -762,9 +766,52 @@ interface HumanoidLook {
   eyes?: string;
 }
 
-function drawHumanoid(look: HumanoidLook): HTMLCanvasElement {
+type Orient = 'front' | 'back' | 'side';
+
+function drawWeapon(px: PixelFn, weapon: HumanoidLook['weapon'], side: 'front' | 'back'): void {
+  const hidden = side === 'back';
+  switch (weapon) {
+    case 'sword':
+      px(13, 8, 1, 9, hidden ? '#9a9aa2' : '#c8c8d0');
+      px(12, 15, 3, 1, '#8a6d3b');
+      break;
+    case 'staff':
+      px(13, 5, 1, 13, '#7a5c38');
+      px(12, 3, 3, 3, hidden ? '#3a7a9a' : '#66ccff');
+      break;
+    case 'spear':
+      px(13, 3, 1, 15, '#8a6d4b');
+      px(12, 2, 3, 2, '#c8c8d0');
+      break;
+    case 'club':
+      px(13, 9, 2, 8, '#6b4a2a');
+      break;
+  }
+}
+
+function drawHumanoid(look: HumanoidLook, orient: Orient = 'front'): HTMLCanvasElement {
   const [c, px] = pixelPainter();
   const { skin, cloth, clothDark } = look;
+  const hair = look.hat ?? '#3a2a1a';
+
+  if (orient === 'side') {
+    // Profile facing right (mirrored for left elsewhere).
+    px(7, 19, 2, 5, clothDark); // striding leg
+    px(5, 11, 6, 8, cloth); // torso (narrower, shifted)
+    px(5, 11, 2, 8, clothDark);
+    px(7, 12, 2, 5, skin); // forward arm
+    px(6, 4, 5, 6, skin); // head
+    px(9, 6, 1, 1, look.eyes ?? '#1a1a1a'); // one eye, forward
+    px(5, 3, 5, 2, hair); // hair/hat over the crown + back
+    if (look.hat) px(5, 2, 4, 1, look.hat);
+    // weapon thrust forward
+    if (look.weapon && look.weapon !== 'none') {
+      px(11, 6, 1, 11, look.weapon === 'staff' ? '#7a5c38' : '#b8b8c0');
+      if (look.weapon === 'staff') px(10, 4, 3, 3, '#66ccff');
+    }
+    return c;
+  }
+
   // legs
   px(5, 19, 2, 5, clothDark);
   px(9, 19, 2, 5, clothDark);
@@ -775,31 +822,19 @@ function drawHumanoid(look: HumanoidLook): HTMLCanvasElement {
   px(3, 12, 1, 5, skin);
   px(12, 12, 1, 5, skin);
   // head
-  px(5, 4, 6, 6, skin);
-  px(6, 6, 1, 1, look.eyes ?? '#1a1a1a');
-  px(9, 6, 1, 1, look.eyes ?? '#1a1a1a');
+  px(5, 4, 6, 6, orient === 'back' ? hair : skin);
+  if (orient === 'front') {
+    px(6, 6, 1, 1, look.eyes ?? '#1a1a1a');
+    px(9, 6, 1, 1, look.eyes ?? '#1a1a1a');
+  } else {
+    px(5, 4, 6, 3, hair); // back of the head is hair
+  }
   if (look.hat) {
     px(4, 2, 8, 3, look.hat);
     px(5, 1, 6, 1, look.hat);
   }
-  // weapon
-  switch (look.weapon) {
-    case 'sword':
-      px(13, 8, 1, 9, '#c8c8d0');
-      px(12, 15, 3, 1, '#8a6d3b');
-      break;
-    case 'staff':
-      px(13, 5, 1, 13, '#7a5c38');
-      px(12, 3, 3, 3, '#66ccff');
-      break;
-    case 'spear':
-      px(13, 3, 1, 15, '#8a6d4b');
-      px(12, 2, 3, 2, '#c8c8d0');
-      break;
-    case 'club':
-      px(13, 9, 2, 8, '#6b4a2a');
-      break;
-  }
+  // weapon + shield swap sides when seen from behind
+  drawWeapon(px, look.weapon, orient === 'back' ? 'back' : 'front');
   if (look.shield) {
     px(1, 12, 3, 5, '#8a8a96');
     px(2, 13, 1, 3, '#d8b45a');
@@ -962,9 +997,17 @@ export function spriteDef(variant: string): SpriteDef {
   let w = 1.4;
   let h = 2.1;
   let emissive = false;
+  let views: SpriteDef['views'];
 
   if (variant in LOOK) {
-    canvas = drawHumanoid(LOOK[variant]);
+    // Directional: front/back/side billboards picked by facing vs. camera.
+    const look = LOOK[variant];
+    canvas = drawHumanoid(look, 'front');
+    views = {
+      front: toTexture(canvas, false),
+      back: toTexture(drawHumanoid(look, 'back'), false),
+      side: toTexture(drawHumanoid(look, 'side'), false),
+    };
     if (variant === 'ogre') { w = 2.2; h = 3.3; }
     if (variant === 'goblin' || variant === 'imp') { w = 1.1; h = 1.65; }
   } else if (variant in RARITY_GLOW) {
@@ -1034,8 +1077,8 @@ export function spriteDef(variant: string): SpriteDef {
     }
   }
 
-  const texture = toTexture(canvas, false);
-  def = { texture, w, h, emissive };
+  const texture = views ? views.front : toTexture(canvas, false);
+  def = { texture, w, h, emissive, views };
   spriteCache.set(variant, def);
   return def;
 }

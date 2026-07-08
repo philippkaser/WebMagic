@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { angleDiff } from '@webmagic/shared';
 import type { WorldState } from '../state';
-import { spriteDef } from './textures';
+import { spriteDef, type SpriteDef } from './textures';
 
 interface SpriteInstance {
   mesh: THREE.Mesh;
@@ -8,6 +9,8 @@ interface SpriteInstance {
   variant: string;
   h: number;
   flashUntil: number;
+  views?: SpriteDef['views'];
+  curView?: string;
 }
 
 /**
@@ -37,12 +40,30 @@ export class EntitySprites {
           : new THREE.MeshLambertMaterial({ map: def.texture, alphaTest: 0.5, side: THREE.DoubleSide });
         const mesh = new THREE.Mesh(geo, mat);
         this.group.add(mesh);
-        inst = { mesh, mat, variant: e.latest.v, h: def.h, flashUntil: 0 };
+        inst = { mesh, mat, variant: e.latest.v, h: def.h, flashUntil: 0, views: def.views };
         this.instances.set(id, inst);
       }
 
       const p = state.sample(e, now);
       const dead = e.latest.a === 'dead';
+
+      // Directional billboards: pick front/back/side from facing vs. the camera.
+      if (inst.views && !dead) {
+        const camAngle = Math.atan2(camZ - p.y, camX - p.x);
+        const rel = angleDiff(p.f, camAngle);
+        const a = Math.abs(rel);
+        let view: 'front' | 'back' | 'side';
+        let mirror = false;
+        if (a <= Math.PI / 4) view = 'front';
+        else if (a >= (3 * Math.PI) / 4) view = 'back';
+        else { view = 'side'; mirror = rel < 0; }
+        if (inst.curView !== view) {
+          inst.mat.map = inst.views[view];
+          inst.mat.needsUpdate = true;
+          inst.curView = view;
+        }
+        inst.mesh.scale.x = mirror ? -1 : 1;
+      }
       let yBase = inst.h / 2;
       if (e.latest.k === 'loot') {
         yBase = inst.h / 2 + 0.15 + Math.sin(now * 0.003 + id) * 0.08; // hovering loot

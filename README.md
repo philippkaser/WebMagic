@@ -101,7 +101,9 @@ to disable the `/goto` and `/xp` dev commands.
   that split into two slimelets when you cut them down** — and studded with **spike
   traps** that bite grounded heroes, so time a jump to cross them unharmed.
 - **Doom-style rendering** — low-res upscaled framebuffer, billboard pixel sprites lit
-  by the scene, merged tile geometry, fog, and a pooled dynamic light system: torches
+  by the scene (humanoids are **4-directional** — front/back/side views chosen from
+  their facing relative to the camera), merged tile geometry, fog, and a pooled
+  dynamic light system: torches
   flicker, firebolts light up corridors as they fly, explode on impact with a real
   flash of light and splash damage, portals glow, rare loot shines. Walls use
   real stone artwork (`client/public/textures/stone-wall.jpg`) turned into full PBR
