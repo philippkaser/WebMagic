@@ -303,12 +303,16 @@ export class GameRenderer {
         }
       }
       for (const e of state.entities.values()) {
-        if (e.latest.k !== 'portal' || e.latest.a === 'dead') continue;
+        if (e.latest.a === 'dead') continue;
         const p = state.sample(e, now);
         const dx = p.x - cx;
         const dz = p.y - cz;
-        if (dx * dx + dz * dz < 30 * 30) {
-          this.fx.portalMote(p.x, 1.4 + Math.random() * 1.2, p.y, e.latest.v === 'portal-exit' ? 0x44ddff : 0x9a4dff);
+        if (dx * dx + dz * dz > 30 * 30) continue;
+        const gy = state.map ? state.map.elevationAtWorld(p.x, p.y) : 0;
+        if (e.latest.k === 'portal') {
+          this.fx.portalMote(p.x, gy + 1.4 + Math.random() * 1.2, p.y, e.latest.v === 'portal-exit' ? 0x44ddff : 0x9a4dff);
+        } else if (e.latest.v === 'campfire' && Math.random() < 0.7) {
+          this.fx.ember(p.x, gy + 0.6, p.y);
         }
       }
 

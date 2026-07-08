@@ -212,7 +212,10 @@ export class WorldState {
     let bestD = Infinity;
     for (const e of this.entities.values()) {
       const k = e.latest.k;
-      const isTarget = k === 'portal' || k === 'loot' || (k === 'npc' && e.latest.v === 'villager');
+      const isTarget =
+        k === 'portal' ||
+        k === 'loot' ||
+        (k === 'npc' && ['villager', 'signpost', 'campfire', 'chicken'].includes(e.latest.v));
       if (!isTarget || e.latest.a === 'dead') continue;
       const d = dist(this.x, this.y, e.nextX, e.nextY);
       if (d < INTERACT_RANGE + 0.8 && d < bestD) {

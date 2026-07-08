@@ -86,6 +86,8 @@ export interface Entity {
   level?: number;
   light?: number;
   dead: boolean;
+  /** Flavor text shown when a player interacts (signposts). Server-only. */
+  interactText?: string;
   /** Height above ground (jumping players). Presentational — not in 2D collision. */
   z?: number;
 

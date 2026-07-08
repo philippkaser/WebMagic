@@ -70,6 +70,8 @@ export class Player {
   /** Passive proc timers. */
   orbitCdUntil = 0;
   auraCdUntil = 0;
+  /** Next time resting at a campfire is allowed. */
+  campfireCdUntil = 0;
   zoneId = 'overworld';
   dungeonRun: DungeonRunState | null = null;
   respawnAt = 0;

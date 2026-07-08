@@ -710,6 +710,29 @@ export class GameServer implements AiHost {
         'The guards can only do so much. We are glad you are here.',
       ];
       this.notify(player, `${target.name ?? 'Villager'}: "${lines[Math.floor(Math.random() * lines.length)]}"`, 'info');
+      return;
+    }
+    if (target.variant === 'signpost') {
+      this.notify(player, target.interactText ?? 'The sign is weathered beyond reading.', 'info');
+      return;
+    }
+    if (target.variant === 'campfire') {
+      const now = this.now();
+      if (now < player.campfireCdUntil) {
+        this.notify(player, 'You have already caught your breath.', 'info');
+        return;
+      }
+      player.campfireCdUntil = now + 8000;
+      const ent = player.entity;
+      zone.heal(this, ent, player.stats.maxHp * 0.45);
+      player.mp = Math.min(player.stats.maxMp, player.mp + player.stats.maxMp * 0.45);
+      this.notify(player, 'You rest by the fire and feel your wounds knit.', 'info');
+      return;
+    }
+    if (target.variant === 'chicken') {
+      this.notify(player, `The chicken squawks: "${this.lootRng.pick(['Bwak!', 'Cluck!', 'Bok bok!'])}"`, 'info');
+      this.broadcastFx(zone, { t: 'fx', kind: 'pickup', x: target.x, y: target.y });
+      return;
     }
   }
 

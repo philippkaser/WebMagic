@@ -12,7 +12,14 @@ import {
 } from '@webmagic/shared';
 import { Entity, RoutineStop } from './entities';
 import { Zone } from './zone';
-import { spawnCritter, spawnMonster, spawnNpc, spawnPortal } from './spawn';
+import { spawnCritter, spawnFixture, spawnMonster, spawnNpc, spawnPortal } from './spawn';
+
+const SIGN_LINES = [
+  'Rest here. The wilds beyond do not forgive the careless.',
+  'Keep the caravans safe and the lanterns lit.',
+  'Portals to the deep lie in the wilds. Fortune and teeth await.',
+  'Nightfall brings raiders. Stand with the guards or run.',
+];
 
 export interface WorldSimHost {
   now(): number;
@@ -159,6 +166,15 @@ export class WorldSim {
         const spot = this.openSpot(center.x, center.y, v.radius * TILE_SIZE * 0.6);
         spawnCritter(this.zone, 'chicken', spot.x, spot.y);
       }
+
+      // A campfire to rest at, and a signpost to read.
+      const fire = this.openSpot(center.x, center.y, v.radius * TILE_SIZE * 0.35);
+      spawnFixture(this.zone, 'campfire', fire.x, fire.y, { light: 0xff8a3c });
+      const sign = this.openSpot(center.x, center.y, v.radius * TILE_SIZE * 0.55);
+      spawnFixture(this.zone, 'signpost', sign.x, sign.y, {
+        name: v.name,
+        interactText: `${v.name} — ${this.rng.pick(SIGN_LINES)}`,
+      });
     }
 
     // Monster camps

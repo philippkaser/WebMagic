@@ -102,6 +102,8 @@ to disable the `/goto` and `/xp` dev commands.
   Villages are dressed with props (barrels, crates, market stalls, hay bales,
   flower patches) and **chickens peck around**, while **fireflies drift after dark
   and butterflies flit by day** — small touches that make the world feel lived-in.
+  You can interact (`F`) with the world too: **read signposts** for local lore,
+  **rest at a village campfire** to heal, **pet the chickens**, and chat with villagers.
 - **Multiplayer dungeons** — 4 overworld portals lead to procedurally generated
   dungeons with infinite floors of scaling difficulty. Everyone entering the same
   portal joins the same instance, forming ad-hoc groups. Loot found inside is

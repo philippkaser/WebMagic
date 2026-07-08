@@ -317,10 +317,13 @@ function startGame(
     const target = state.nearestInteractable();
     if (target) {
       const l = target.latest;
-      let label = 'E — interact';
-      if (l.k === 'portal') label = `E — ${l.v === 'portal-exit' ? 'Leave through' : 'Enter'} ${l.n ?? 'portal'}`;
-      else if (l.k === 'loot') label = `E — pick up ${l.n ?? 'loot'}`;
-      else if (l.k === 'npc') label = `E — talk to ${l.n ?? 'villager'}`;
+      let label = 'F — interact';
+      if (l.k === 'portal') label = `F — ${l.v === 'portal-exit' ? 'Leave through' : 'Enter'} ${l.n ?? 'portal'}`;
+      else if (l.k === 'loot') label = `F — pick up ${l.n ?? 'loot'}`;
+      else if (l.v === 'signpost') label = 'F — read the sign';
+      else if (l.v === 'campfire') label = 'F — rest at the fire';
+      else if (l.v === 'chicken') label = 'F — pet the chicken';
+      else if (l.k === 'npc') label = `F — talk to ${l.n ?? 'villager'}`;
       hud.setPrompt(label);
     } else {
       hud.setPrompt(null);

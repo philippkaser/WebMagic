@@ -1096,6 +1096,34 @@ function drawTree(): HTMLCanvasElement {
   return c;
 }
 
+function drawSignpost(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(14, 18);
+  px(6, 6, 2, 12, '#6b4a2a'); // post
+  px(6, 6, 1, 12, '#5a3d22');
+  px(2, 2, 10, 5, '#9a6a3a'); // board
+  px(2, 2, 10, 1, '#b98a52');
+  px(2, 2, 1, 5, '#7a5228');
+  px(4, 4, 6, 1, '#4a3018'); // engraving lines
+  px(4, 6, 5, 1, '#4a3018');
+  return c;
+}
+
+function drawCampfire(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(14, 12);
+  px(2, 9, 10, 2, '#5a3d22'); // logs
+  px(3, 8, 8, 2, '#6b4a2a');
+  px(2, 10, 3, 1, '#3a2412');
+  px(9, 10, 3, 1, '#3a2412');
+  // flames
+  px(5, 4, 4, 5, '#e0530f');
+  px(6, 2, 2, 4, '#ff9a2a');
+  px(6, 5, 2, 2, '#ffd86a');
+  px(6, 3, 1, 1, '#fff2b8');
+  px(4, 6, 1, 2, '#ff7a1c');
+  px(9, 6, 1, 2, '#ff7a1c');
+  return c;
+}
+
 function drawChicken(): HTMLCanvasElement {
   const [c, px] = pixelPainter(12, 10);
   px(3, 4, 6, 4, '#f2f2f2'); // body
@@ -1246,6 +1274,17 @@ export function spriteDef(variant: string): SpriteDef {
         canvas = drawChicken();
         w = 0.6;
         h = 0.5;
+        break;
+      case 'signpost':
+        canvas = drawSignpost();
+        w = 1.1;
+        h = 1.4;
+        break;
+      case 'campfire':
+        canvas = drawCampfire();
+        w = 1.2;
+        h = 1.0;
+        emissive = true;
         break;
       case 'slime':
         canvas = drawSlime('#5bb84a', '#2f7a2c', '#9fe08a');

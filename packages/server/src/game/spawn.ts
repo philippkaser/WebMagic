@@ -94,14 +94,44 @@ export function spawnCritter(zone: Zone, variant: string, x: number, y: number):
     x,
     y,
     facing: Math.random() * Math.PI * 2,
-    radius: 0.28,
-    speed: 1.7,
+    radius: 0.32,
+    speed: 1.1, // calm enough to actually pet
     hp: 5,
     maxHp: 5,
     anim: 'idle',
     faction: 'none', // never a combat target
     dead: false,
-    ai: { mode: 'wander', home: { x, y }, wanderRadius: 6, nextThink: 0 },
+    ai: { mode: 'wander', home: { x, y }, wanderRadius: 4, nextThink: 0 },
+  };
+  zone.addEntity(e);
+  return e;
+}
+
+/** A static interactable fixture: a signpost to read, a campfire to rest at. */
+export function spawnFixture(
+  zone: Zone,
+  variant: string,
+  x: number,
+  y: number,
+  opts: { name?: string; interactText?: string; light?: number } = {}
+): Entity {
+  const e: Entity = {
+    id: allocEntityId(),
+    kind: 'npc',
+    variant,
+    x,
+    y,
+    facing: 0,
+    radius: 0.4,
+    speed: 0,
+    hp: 1,
+    maxHp: 1,
+    anim: 'idle',
+    faction: 'none',
+    dead: false,
+    name: opts.name,
+    interactText: opts.interactText,
+    light: opts.light,
   };
   zone.addEntity(e);
   return e;
