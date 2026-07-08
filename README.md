@@ -111,7 +111,10 @@ to disable the `/goto` and `/xp` dev commands.
   by the scene (humanoids are **4-directional** — front/back/side views chosen from
   their facing relative to the camera — drawn at higher resolution with two-tone
   shading, and recoloured per-entity so crowds of villagers, guards and monsters
-  vary), merged tile geometry, fog, and a pooled
+  vary), **vertical terrain** — a per-tile height field (deterministic in the shared
+  map) gives the wilds rolling inclines and raises some dungeon chambers a step, with
+  floors, walls, trees, sprites and the camera all riding the elevation; settlements
+  and roads stay flat — merged tile geometry, fog, and a pooled
   dynamic light system: torches
   flicker, firebolts light up corridors as they fly, explode on impact with a real
   flash of light and splash damage, portals glow, rare loot shines. Walls use

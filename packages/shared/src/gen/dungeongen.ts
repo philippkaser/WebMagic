@@ -60,8 +60,12 @@ export function generateDungeonFloor(dungeonSeed: number, floor: number): Dungeo
       continue;
     }
     rooms.push({ x, y, w, h });
+    const roomElevation = rng.int(0, 1); // some chambers sit a step higher
     for (let tx = x; tx < x + w; tx++) {
-      for (let ty = y; ty < y + h; ty++) map.set(tx, ty, Tile.Floor);
+      for (let ty = y; ty < y + h; ty++) {
+        map.set(tx, ty, Tile.Floor);
+        map.setHeight(tx, ty, roomElevation);
+      }
     }
   }
 

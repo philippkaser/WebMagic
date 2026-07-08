@@ -1,4 +1,4 @@
-import { Rng, hashSeed, Vec2, dist } from '../math';
+import { Rng, hashSeed, makeNoise2D, Vec2, dist } from '../math';
 import { Tile, TileMap, tileCenter } from '../tiles';
 import type { MonsterId } from '../content/monsters';
 
@@ -143,6 +143,27 @@ export function generateOverworld(seed: number): OverworldData {
     torches.push({ x: c.x + 3, y: c.y - 3 });
     portals.push({ id: i, name: PORTAL_NAMES[i], tx: x, ty: y, level: 2 + i * 3 });
   }
+
+  // --- terrain elevation: rolling hills across the wilds, flattened around
+  // settlements, roads and portals so gameplay spaces stay level.
+  const hn = makeNoise2D(hashSeed(seed, 7), 20);
+  const hn2 = makeNoise2D(hashSeed(seed, 8), 40);
+  for (let ty = 0; ty < map.h; ty++) {
+    for (let tx = 0; tx < map.w; tx++) {
+      const n = hn(tx / 11, ty / 11) * 0.7 + hn2(tx / 5, ty / 5) * 0.3;
+      map.setHeight(tx, ty, Math.round(Math.pow(n, 1.4) * 5)); // 0..5 levels
+      if (map.get(tx, ty) === Tile.Road) map.setHeight(tx, ty, 0);
+    }
+  }
+  const flatten = (cx: number, cy: number, radius: number) => {
+    for (let ty = Math.floor(cy - radius); ty <= cy + radius; ty++) {
+      for (let tx = Math.floor(cx - radius); tx <= cx + radius; tx++) {
+        if (dist(tx, ty, cx, cy) <= radius) map.setHeight(tx, ty, 0);
+      }
+    }
+  };
+  for (const v of villages) flatten(v.cx, v.cy, v.radius + 5);
+  for (const p of portals) flatten(p.tx, p.ty, 6);
 
   return { map, villages, camps, portals, roads, torches };
 }

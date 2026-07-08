@@ -1,6 +1,9 @@
 /** World-space size of one tile, in meters. */
 export const TILE_SIZE = 2;
 
+/** Meters of elevation per height level (terrain verticality). */
+export const HEIGHT_STEP = 0.7;
+
 export enum Tile {
   Void = 0, // outside the map / unrendered
   Grass = 1,
@@ -31,11 +34,44 @@ export class TileMap {
   readonly w: number;
   readonly h: number;
   readonly tiles: Uint8Array;
+  /** Per-tile terrain elevation, in height levels (see HEIGHT_STEP). */
+  readonly heights: Uint8Array;
 
   constructor(w: number, h: number, fill: Tile = Tile.Void) {
     this.w = w;
     this.h = h;
     this.tiles = new Uint8Array(w * h).fill(fill);
+    this.heights = new Uint8Array(w * h);
+  }
+
+  heightLevel(tx: number, ty: number): number {
+    if (!this.inBounds(tx, ty)) return 0;
+    return this.heights[ty * this.w + tx];
+  }
+
+  setHeight(tx: number, ty: number, level: number): void {
+    if (this.inBounds(tx, ty)) this.heights[ty * this.w + tx] = Math.max(0, Math.min(255, level));
+  }
+
+  /**
+   * Smooth ground elevation in meters at a world position — bilinear over the
+   * surrounding tile-centre heights, so flat areas stay flat and differing
+   * neighbours become walkable inclines.
+   */
+  elevationAtWorld(x: number, y: number): number {
+    const gx = x / TILE_SIZE - 0.5;
+    const gy = y / TILE_SIZE - 0.5;
+    const tx = Math.floor(gx);
+    const ty = Math.floor(gy);
+    const fx = gx - tx;
+    const fy = gy - ty;
+    const a = this.heightLevel(tx, ty);
+    const b = this.heightLevel(tx + 1, ty);
+    const c = this.heightLevel(tx, ty + 1);
+    const d = this.heightLevel(tx + 1, ty + 1);
+    const top = a + (b - a) * fx;
+    const bot = c + (d - c) * fx;
+    return (top + (bot - top) * fy) * HEIGHT_STEP;
   }
 
   inBounds(tx: number, ty: number): boolean {

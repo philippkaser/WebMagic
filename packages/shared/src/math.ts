@@ -35,6 +35,31 @@ export function angleLerp(a: number, b: number, t: number): number {
   return a + angleDiff(a, b) * t;
 }
 
+/**
+ * Tileable bilinear value noise in [0,1). Used by shared world generation
+ * (terrain heights) so client and server agree. `period` is the lattice size.
+ */
+export function makeNoise2D(seed: number, period = 16): (x: number, y: number) => number {
+  const lattice = new Float32Array(period * period);
+  const r = new Rng(seed >>> 0);
+  for (let i = 0; i < lattice.length; i++) lattice[i] = r.next();
+  const at = (x: number, y: number) =>
+    lattice[((y % period) + period) % period * period + (((x % period) + period) % period)];
+  return (x, y) => {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const fx = x - xi;
+    const fy = y - yi;
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+    const a = at(xi, yi);
+    const b = at(xi + 1, yi);
+    const c = at(xi, yi + 1);
+    const d = at(xi + 1, yi + 1);
+    return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+  };
+}
+
 /** Combine integer parts into a single 32-bit seed (order-sensitive). */
 export function hashSeed(...parts: number[]): number {
   let h = 0x811c9dc5;

@@ -69,10 +69,11 @@ export class LevelMesh {
             [-1, 0, [x0, z0, x0, z1], [-1, 0, 0]], // west face
             [1, 0, [x1, z1, x1, z0], [1, 0, 0]], // east face
           ];
+          const wallBase = map.elevationAtWorld((tx + 0.5) * TILE_SIZE, (ty + 0.5) * TILE_SIZE);
           for (const [dx, dy, corners, normal] of neighbors) {
             const n = map.get(tx + dx, ty + dy);
             if (isBlocking(n) && n !== Tile.Tree && n !== Tile.Water) continue;
-            pushWallQuad(bucket, corners, normal);
+            pushWallQuad(bucket, corners, normal, wallBase);
           }
         }
       }
@@ -81,7 +82,7 @@ export class LevelMesh {
     // --- floor meshes: PBR relief (grass tufts, plank grooves, water ripples…)
     // where available, flat colour otherwise.
     for (const [texName, tiles] of floorBuckets) {
-      const geo = buildFloorGeometry(tiles, 0);
+      const geo = buildFloorGeometry(tiles, 0, map);
       let mat: THREE.Material;
       if (hasTilePBR(texName)) {
         const pbr = tilePBR(texName);
@@ -137,7 +138,7 @@ export class LevelMesh {
           if (!isBlocking(map.get(tx, ty))) ceilTiles.push(tx, ty);
         }
       }
-      const geo = buildFloorGeometry(ceilTiles, WALL_HEIGHT, true);
+      const geo = buildFloorGeometry(ceilTiles, WALL_HEIGHT, null, true);
       const mat = new THREE.MeshLambertMaterial({ map: tileTexture('ceiling') });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
@@ -152,7 +153,7 @@ export class LevelMesh {
       const uv: number[] = [];
       const nrm: number[] = [];
       for (const p of treePositions) {
-        pushCrossQuads(pos, uv, nrm, p.x, p.y, tree.w, tree.h);
+        pushCrossQuads(pos, uv, nrm, p.x, p.y, tree.w, tree.h, map.elevationAtWorld(p.x, p.y));
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -180,8 +181,9 @@ export class LevelMesh {
       const m = new THREE.Matrix4();
       let i = 0;
       for (const p of spikePositions) {
+        const e = map.elevationAtWorld(p.x, p.y);
         for (const [ox, oz] of offsets) {
-          m.makeTranslation(p.x + ox, 0.27, p.y + oz);
+          m.makeTranslation(p.x + ox, 0.27 + e, p.y + oz);
           mesh.setMatrixAt(i++, m);
         }
       }
@@ -208,10 +210,11 @@ export class LevelMesh {
   }
 }
 
-function buildFloorGeometry(tiles: number[], height: number, flip = false): THREE.BufferGeometry {
+function buildFloorGeometry(tiles: number[], height: number, map: TileMap | null, flip = false): THREE.BufferGeometry {
   const pos: number[] = [];
   const uv: number[] = [];
   const nrm: number[] = [];
+  const elev = (x: number, z: number) => (map ? map.elevationAtWorld(x, z) : 0);
   for (let i = 0; i < tiles.length; i += 2) {
     const tx = tiles[i];
     const ty = tiles[i + 1];
@@ -220,10 +223,15 @@ function buildFloorGeometry(tiles: number[], height: number, flip = false): THRE
     const z0 = ty * TILE_SIZE;
     const z1 = (ty + 1) * TILE_SIZE;
     const ny = flip ? -1 : 1;
+    // Per-corner elevation so floors follow terrain (seamless at shared edges).
+    const y00 = height + elev(x0, z0);
+    const y01 = height + elev(x0, z1);
+    const y11 = height + elev(x1, z1);
+    const y10 = height + elev(x1, z0);
     if (!flip) {
-      pos.push(x0, height, z0, x0, height, z1, x1, height, z1, x0, height, z0, x1, height, z1, x1, height, z0);
+      pos.push(x0, y00, z0, x0, y01, z1, x1, y11, z1, x0, y00, z0, x1, y11, z1, x1, y10, z0);
     } else {
-      pos.push(x0, height, z0, x1, height, z1, x0, height, z1, x0, height, z0, x1, height, z0, x1, height, z1);
+      pos.push(x0, y00, z0, x1, y11, z1, x0, y01, z1, x0, y00, z0, x1, y10, z0, x1, y11, z1);
     }
     uv.push(0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1);
     for (let v = 0; v < 6; v++) nrm.push(0, ny, 0);
@@ -238,26 +246,30 @@ function buildFloorGeometry(tiles: number[], height: number, flip = false): THRE
 function pushWallQuad(
   bucket: { pos: number[]; uv: number[]; nrm: number[] },
   corners: number[], // [ax, az, bx, bz] — left edge then right edge (viewed from outside)
-  normal: number[]
+  normal: number[],
+  baseY: number
 ): void {
   const [ax, az, bx, bz] = corners;
-  const h = WALL_HEIGHT;
+  const y0 = baseY;
+  const y1 = baseY + WALL_HEIGHT;
   const u = WALL_TEX_SCALE; // repeats across the tile width
-  const vTop = (h / TILE_SIZE) * WALL_TEX_SCALE; // keep texels square
+  const vTop = (WALL_HEIGHT / TILE_SIZE) * WALL_TEX_SCALE; // keep texels square
   // two triangles: (a0,b0,b1) (a0,b1,a1) where 0 = ground, 1 = top
-  bucket.pos.push(ax, 0, az, bx, 0, bz, bx, h, bz, ax, 0, az, bx, h, bz, ax, h, az);
+  bucket.pos.push(ax, y0, az, bx, y0, bz, bx, y1, bz, ax, y0, az, bx, y1, bz, ax, y1, az);
   bucket.uv.push(0, 0, u, 0, u, vTop, 0, 0, u, vTop, 0, vTop);
   for (let v = 0; v < 6; v++) bucket.nrm.push(normal[0], normal[1], normal[2]);
 }
 
-function pushCrossQuads(pos: number[], uv: number[], nrm: number[], x: number, z: number, w: number, h: number): void {
+function pushCrossQuads(pos: number[], uv: number[], nrm: number[], x: number, z: number, w: number, h: number, baseY = 0): void {
   const hw = w / 2;
+  const y0 = baseY;
+  const y1 = baseY + h;
   const planes = [
     [x - hw, z, x + hw, z, 0, 0, 1],
     [x, z - hw, x, z + hw, 1, 0, 0],
   ];
   for (const [ax, az, bx, bz, nx, ny, nz] of planes) {
-    pos.push(ax, 0, az, bx, 0, bz, bx, h, bz, ax, 0, az, bx, h, bz, ax, h, az);
+    pos.push(ax, y0, az, bx, y0, bz, bx, y1, bz, ax, y0, az, bx, y1, bz, ax, y1, az);
     uv.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
     for (let v = 0; v < 6; v++) nrm.push(nx, ny, nz);
   }

@@ -152,7 +152,8 @@ export class GameRenderer {
       const geo = new THREE.PlaneGeometry(flameDef.w, flameDef.h);
       const mat = new THREE.MeshBasicMaterial({ map: flameDef.texture, transparent: true, alphaTest: 0.05 });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(t.x, 2.0, t.y);
+      const te = state.map ? state.map.elevationAtWorld(t.x, t.y) : 0;
+      mesh.position.set(t.x, 2.0 + te, t.y);
       this.scene.add(mesh);
       this.torchFlames.push(mesh);
     }
@@ -213,7 +214,8 @@ export class GameRenderer {
     const shakeYaw = shake * 0.055 * Math.sin(st * 62 + 1.3);
     const shakePitch = shake * 0.05 * Math.sin(st * 71 + 4.1);
     const shakeRoll = shake * 0.09 * Math.sin(st * 55 + 2.7);
-    this.camera.position.set(state.x, EYE_HEIGHT + bob + camZ + this.landDip, state.y);
+    const ground = state.map ? state.map.elevationAtWorld(state.x, state.y) : 0;
+    this.camera.position.set(state.x, EYE_HEIGHT + bob + camZ + this.landDip + ground, state.y);
     this.camera.rotation.y = input.yaw - Math.PI / 2 + shakeYaw;
     this.camera.rotation.x = input.pitch + this.pitchKick + shakePitch;
     this.camera.rotation.z = shakeRoll;
@@ -254,7 +256,7 @@ export class GameRenderer {
         const ang = now * 0.004 + (i * Math.PI * 2) / this.orbitOrbs.length;
         const ox = state.x + Math.cos(ang) * 2.3;
         const oy = state.y + Math.sin(ang) * 2.3;
-        this.orbitOrbs[i].position.set(ox, 1.0 + camZ + Math.sin(now * 0.006 + i) * 0.15, oy);
+        this.orbitOrbs[i].position.set(ox, 1.0 + camZ + ground + Math.sin(now * 0.006 + i) * 0.15, oy);
       }
       dynamics.push({ x: state.x, y: state.y, height: 1.1 + camZ, color: 0xff7722, intensity: 6, range: 9, flicker: 0.3, seed: 9 });
     }

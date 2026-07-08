@@ -54,6 +54,31 @@ test('overworld has the expected landmarks and a solid border', () => {
   assert.ok(w.map.blockedTile(w.map.w - 1, w.map.h - 1), 'far corner is walled');
 });
 
+test('overworld has rolling terrain elevation, flat around villages, deterministic', () => {
+  const a = generateOverworld(4242);
+  const b = generateOverworld(4242);
+  assert.deepEqual([...a.map.heights], [...b.map.heights], 'heights are deterministic per seed');
+
+  let maxLevel = 0;
+  for (const h of a.map.heights) maxLevel = Math.max(maxLevel, h);
+  assert.ok(maxLevel > 0, 'the wilds should have hills');
+
+  // Village centres are flattened.
+  for (const v of a.villages) {
+    assert.equal(a.map.heightLevel(Math.round(v.cx), Math.round(v.cy)), 0, `${v.name} centre is flat`);
+  }
+});
+
+test('elevationAtWorld interpolates smoothly between tile heights', () => {
+  const m = new TileMap(4, 4, Tile.Grass);
+  m.setHeight(1, 1, 0);
+  m.setHeight(2, 1, 2); // a 2-level step to the east
+  const west = m.elevationAtWorld(1.5 * TILE_SIZE, 1.5 * TILE_SIZE);
+  const mid = m.elevationAtWorld(2.0 * TILE_SIZE, 1.5 * TILE_SIZE);
+  const east = m.elevationAtWorld(2.5 * TILE_SIZE, 1.5 * TILE_SIZE);
+  assert.ok(east > mid && mid > west, 'elevation ramps up across the step, not a hard jump');
+});
+
 test('every village inn spawn is on walkable ground', () => {
   const w = generateOverworld(31337);
   for (const v of w.villages) {
