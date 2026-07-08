@@ -987,72 +987,116 @@ function rgbOf(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+const PORTAL_W = 30;
+const PORTAL_H = 46;
+
 /**
- * A low-res, chunky-pixel portal face: concentric wave bands rippling out from
- * a bright core. Drawn on a tiny grid with NearestFilter so it matches the
- * game's pixel-art look (no smooth gradients).
+ * A chunky-pixel "tear in the fabric of space": a jagged vertical rift with a
+ * glowing torn edge, a dark void interior lit by crackling energy filaments and
+ * sparks of starlight. Drawn on a tiny grid with NearestFilter to match the
+ * game's pixel-art look; `phase` animates the crackle.
  */
-function drawPortalWaves(inner: string, outer: string, phase: number): HTMLCanvasElement {
-  const S = 40; // chunky pixel grid
-  const [c, ctx] = makeCanvas(S, S);
-  const cx = (S - 1) / 2;
-  const cy = (S - 1) / 2;
+function drawPortalRift(inner: string, outer: string, phase: number): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(PORTAL_W, PORTAL_H);
+  const cx = (PORTAL_W - 1) / 2;
   const [ir, ig, ib] = rgbOf(inner);
   const [or_, og, ob] = rgbOf(outer);
-  const img = ctx.createImageData(S, S);
-  for (let y = 0; y < S; y++) {
-    for (let x = 0; x < S; x++) {
+  const voidR = 12, voidG = 4, voidB = 22; // near-black void
+  const img = ctx.createImageData(PORTAL_W, PORTAL_H);
+  const maxHW = PORTAL_W / 2 - 1;
+  for (let y = 0; y < PORTAL_H; y++) {
+    const ny = y / (PORTAL_H - 1);
+    // lens profile (fat middle, pinched ends) + jagged, crackling edge
+    const lens = Math.pow(Math.sin(Math.PI * ny), 0.62);
+    const jag = Math.sin(y * 0.8 + phase * 6) * 1.8 + Math.sin(y * 2.1 - phase * 3.7) * 1.1;
+    const edge = lens * maxHW + jag;
+    for (let x = 0; x < PORTAL_W; x++) {
+      const o = (y * PORTAL_W + x) * 4;
       const dx = x - cx;
-      const dy = y - cy;
-      const r = Math.sqrt(dx * dx + dy * dy) / (S / 2);
-      const o = (y * S + x) * 4;
-      if (r > 1) {
+      if (edge < 0.6 || Math.abs(dx) > edge) {
         img.data[o + 3] = 0;
         continue;
       }
-      // concentric waves moving outward (phase animates the band positions)
-      const band = Math.sin(r * Math.PI * 5 - phase * Math.PI * 2);
-      const t = band * 0.5 + 0.5; // 0..1 across a band
-      const core = r < 0.14 ? 1 : 0;
-      const rr = core ? 255 : Math.round(or_ + (ir - or_) * t);
-      const gg = core ? 255 : Math.round(og + (ig - og) * t);
-      const bb = core ? 255 : Math.round(ob + (ib - ob) * t);
-      img.data[o] = rr;
-      img.data[o + 1] = gg;
-      img.data[o + 2] = bb;
-      img.data[o + 3] = Math.round((1 - r) * 255); // fade to the rim
+      const rim = edge - Math.abs(dx); // distance in from the torn edge
+      let r: number, g: number, b: number;
+      if (rim < 1.6) {
+        // the rip itself glows white-hot toward the inner colour
+        r = Math.round((255 + ir) / 2);
+        g = Math.round((255 + ig) / 2);
+        b = Math.round((255 + ib) / 2);
+      } else {
+        const en = Math.sin(dx * 0.7 + y * 0.35 - phase * 7) * Math.cos(y * 0.5 + phase * 5);
+        const star = (x * 7 + y * 13 + Math.floor(phase * 4) * 29) % 41 < 2;
+        if (star) {
+          r = g = b = 255;
+        } else {
+          const t = Math.pow(Math.max(0, en), 2); // energy filaments
+          r = Math.round(voidR + (ir - voidR) * t);
+          g = Math.round(voidG + (ig - voidG) * t);
+          b = Math.round(voidB + (ib - voidB) * t);
+          // hint of the edge colour bleeding inward
+          const eb = Math.max(0, 1 - rim / 5) * 0.5;
+          r = Math.round(r + (or_ - r) * eb);
+          g = Math.round(g + (og - g) * eb);
+          b = Math.round(b + (ob - b) * eb);
+        }
+      }
+      img.data[o] = r;
+      img.data[o + 1] = g;
+      img.data[o + 2] = b;
+      img.data[o + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
   return c;
 }
 
-interface PortalWaveTex {
+interface PortalRiftTex {
   texture: THREE.CanvasTexture;
   canvas: HTMLCanvasElement;
   inner: string;
   outer: string;
 }
-const portalWaveCache = new Map<string, PortalWaveTex>();
+const portalRiftCache = new Map<string, PortalRiftTex>();
 
-/** Cached pixelated wave texture; call redrawPortalWaves() to animate it. */
-export function portalWaveTexture(kind: 'portal' | 'portal-exit'): PortalWaveTex {
-  let entry = portalWaveCache.get(kind);
+/** Cached pixelated rift texture; call redrawPortalRift() to animate it. */
+export function portalRiftTexture(kind: 'portal' | 'portal-exit'): PortalRiftTex {
+  let entry = portalRiftCache.get(kind);
   if (entry) return entry;
-  const [inner, outer] = kind === 'portal-exit' ? ['#9fefff', '#2b6fd8'] : ['#e0b0ff', '#7a2bd8'];
-  const canvas = drawPortalWaves(inner, outer, 0);
+  const [inner, outer] = kind === 'portal-exit' ? ['#a8f0ff', '#2b6fd8'] : ['#e0b0ff', '#7a2bd8'];
+  const canvas = drawPortalRift(inner, outer, 0);
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter; // chunky pixels, like the rest of the game
   texture.minFilter = THREE.NearestFilter;
   texture.colorSpace = THREE.SRGBColorSpace;
   entry = { texture, canvas, inner, outer };
-  portalWaveCache.set(kind, entry);
+  portalRiftCache.set(kind, entry);
   return entry;
 }
 
-/** Re-render the wave bands at a new phase (ripples flowing outward). */
-export function redrawPortalWaves(entry: PortalWaveTex, phase: number): void {
-  const next = drawPortalWaves(entry.inner, entry.outer, phase);
+/** Aspect ratio (w/h) of the rift plane so the tear isn't stretched. */
+export const PORTAL_RIFT_ASPECT = PORTAL_W / PORTAL_H;
+
+let portalGlowTex: THREE.CanvasTexture | null = null;
+/** Soft radial glow used as a halo behind a portal rift. */
+export function portalGlowTexture(): THREE.CanvasTexture {
+  if (portalGlowTex) return portalGlowTex;
+  const S = 64;
+  const [c, ctx] = makeCanvas(S, S);
+  const g = ctx.createRadialGradient(S / 2, S / 2, 2, S / 2, S / 2, S / 2);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.4, 'rgba(255,255,255,0.5)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  portalGlowTex = new THREE.CanvasTexture(c);
+  portalGlowTex.colorSpace = THREE.SRGBColorSpace;
+  return portalGlowTex;
+}
+
+/** Re-render the rift at a new phase (crackling edge + shifting energy). */
+export function redrawPortalRift(entry: PortalRiftTex, phase: number): void {
+  const next = drawPortalRift(entry.inner, entry.outer, phase);
   const ctx = entry.canvas.getContext('2d')!;
   ctx.clearRect(0, 0, entry.canvas.width, entry.canvas.height);
   ctx.drawImage(next, 0, 0);
