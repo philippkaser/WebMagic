@@ -172,10 +172,11 @@ export class GameRenderer {
     if (isDungeon) {
       nightness = 1;
       this.scene.background = DUNGEON_FOG;
-      this.scene.fog = new THREE.Fog(DUNGEON_FOG, 6, 46);
-      this.hemi.intensity = 0.5;
-      this.hemi.color.setHex(0x6a6f88);
-      this.hemi.groundColor.setHex(0x201a2c);
+      // Push the fog back so the tall, cavernous halls read as imposing space.
+      this.scene.fog = new THREE.Fog(DUNGEON_FOG, 8, 60);
+      this.hemi.intensity = 0.7;
+      this.hemi.color.setHex(0x7a80a0);
+      this.hemi.groundColor.setHex(0x241d30);
       this.sun.intensity = 0;
       this.moon.intensity = 0;
       this.stars.visible = false;

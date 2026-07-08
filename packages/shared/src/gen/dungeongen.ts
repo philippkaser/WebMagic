@@ -60,12 +60,8 @@ export function generateDungeonFloor(dungeonSeed: number, floor: number): Dungeo
       continue;
     }
     rooms.push({ x, y, w, h });
-    const roomElevation = rng.int(0, 1); // some chambers sit a step higher
     for (let tx = x; tx < x + w; tx++) {
-      for (let ty = y; ty < y + h; ty++) {
-        map.set(tx, ty, Tile.Floor);
-        map.setHeight(tx, ty, roomElevation);
-      }
+      for (let ty = y; ty < y + h; ty++) map.set(tx, ty, Tile.Floor);
     }
   }
 
@@ -96,6 +92,13 @@ export function generateDungeonFloor(dungeonSeed: number, floor: number): Dungeo
   }
   const stairsT = roomCenter(stairsRoom);
   map.set(stairsT.x, stairsT.y, Tile.StairsDown);
+  // Dungeons are otherwise flat; the stairs sit on a raised dais (the one place
+  // with steps) so the descent reads as a deliberate landmark.
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      if (Math.abs(dx) + Math.abs(dy) <= 3) map.setHeight(stairsT.x + dx, stairsT.y + dy, 1);
+    }
+  }
 
   // --- exit portal in the entry room (activation gated by DUNGEON_KEEP_FLOORS)
   const exitT = { x: entryRoom.x + 1, y: entryRoom.y + 1 };

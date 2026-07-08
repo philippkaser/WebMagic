@@ -4,6 +4,10 @@ import type { PropDef } from '@webmagic/shared';
 import { hasTilePBR, spriteDef, tilePBR, tileTexture, wallPBR } from './textures';
 
 export const WALL_HEIGHT = 3.2;
+/** Dungeons are cavernous and imposing — far taller than overworld houses. */
+export const DUNGEON_WALL_HEIGHT = 7.5;
+/** Walls extend this far below their base to hide gaps at elevation changes. */
+const WALL_SKIRT = 4;
 /** Wall texture repeats per tile. >1 zooms the stonework out (smaller, denser blocks). */
 const WALL_TEX_SCALE = 1.8;
 
@@ -19,6 +23,7 @@ export class LevelMesh {
   private waterMaps: THREE.Texture[] = [];
 
   build(map: TileMap, kind: 'overworld' | 'dungeon', props: PropDef[] = []): void {
+    const wallHeight = kind === 'dungeon' ? DUNGEON_WALL_HEIGHT : WALL_HEIGHT;
     const floorBuckets = new Map<string, number[]>(); // texture -> positions of tile quads
     const wallBuckets = new Map<string, { pos: number[]; uv: number[]; nrm: number[] }>();
     const treePositions: { x: number; y: number }[] = [];
@@ -74,7 +79,7 @@ export class LevelMesh {
           for (const [dx, dy, corners, normal] of neighbors) {
             const n = map.get(tx + dx, ty + dy);
             if (isBlocking(n) && n !== Tile.Tree && n !== Tile.Water) continue;
-            pushWallQuad(bucket, corners, normal, wallBase);
+            pushWallQuad(bucket, corners, normal, wallBase, wallHeight);
           }
         }
       }
@@ -139,7 +144,7 @@ export class LevelMesh {
           if (!isBlocking(map.get(tx, ty))) ceilTiles.push(tx, ty);
         }
       }
-      const geo = buildFloorGeometry(ceilTiles, WALL_HEIGHT, null, true);
+      const geo = buildFloorGeometry(ceilTiles, wallHeight, null, true);
       const mat = new THREE.MeshLambertMaterial({ map: tileTexture('ceiling') });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
@@ -276,16 +281,18 @@ function pushWallQuad(
   bucket: { pos: number[]; uv: number[]; nrm: number[] },
   corners: number[], // [ax, az, bx, bz] — left edge then right edge (viewed from outside)
   normal: number[],
-  baseY: number
+  baseY: number,
+  wallHeight: number
 ): void {
   const [ax, az, bx, bz] = corners;
-  const y0 = baseY;
-  const y1 = baseY + WALL_HEIGHT;
+  const y0 = baseY - WALL_SKIRT; // extend below ground to hide elevation gaps
+  const y1 = baseY + wallHeight;
   const u = WALL_TEX_SCALE; // repeats across the tile width
-  const vTop = (WALL_HEIGHT / TILE_SIZE) * WALL_TEX_SCALE; // keep texels square
+  const vBot = -(WALL_SKIRT / TILE_SIZE) * WALL_TEX_SCALE;
+  const vTop = (wallHeight / TILE_SIZE) * WALL_TEX_SCALE; // keep texels square
   // two triangles: (a0,b0,b1) (a0,b1,a1) where 0 = ground, 1 = top
   bucket.pos.push(ax, y0, az, bx, y0, bz, bx, y1, bz, ax, y0, az, bx, y1, bz, ax, y1, az);
-  bucket.uv.push(0, 0, u, 0, u, vTop, 0, 0, u, vTop, 0, vTop);
+  bucket.uv.push(0, vBot, u, vBot, u, vTop, 0, vBot, u, vTop, 0, vTop);
   for (let v = 0; v < 6; v++) bucket.nrm.push(normal[0], normal[1], normal[2]);
 }
 
