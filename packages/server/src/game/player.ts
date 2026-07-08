@@ -72,6 +72,10 @@ export class Player {
   auraCdUntil = 0;
   /** Next time resting at a campfire is allowed. */
   campfireCdUntil = 0;
+  /** Shrine blessing: outgoing damage is boosted while now < blessUntil. */
+  blessUntil = 0;
+  /** Next time a shrine will answer a prayer. */
+  shrineCdUntil = 0;
   zoneId = 'overworld';
   dungeonRun: DungeonRunState | null = null;
   respawnAt = 0;

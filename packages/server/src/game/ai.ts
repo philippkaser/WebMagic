@@ -77,6 +77,7 @@ export function tickAi(host: AiHost, zone: Zone, dt: number, clock: WorldClock):
     else if (e.variant === 'villager') tickVillager(host, zone, e, dt, now, clock);
     else if (e.variant === 'caravan') tickCaravan(host, zone, e, dt, now);
     else if (e.variant === 'caravan-guard') tickCaravanGuard(host, zone, e, dt, now);
+    else if (e.variant === 'chicken' || e.variant === 'deer') tickCritter(zone, e, dt, now);
   }
 }
 
@@ -144,6 +145,52 @@ function scanForTarget(zone: Zone, e: Entity, range: number, targetFaction: 'pla
   return best;
 }
 
+/** Nearest live critter (chicken/deer) a predator could hunt. */
+function scanForPrey(zone: Zone, e: Entity, range: number): Entity | null {
+  let best: Entity | null = null;
+  let bestD = Infinity;
+  for (const other of zone.grid.query(e.x, e.y, range)) {
+    if (other.dead || other.faction !== 'none') continue;
+    if (other.variant !== 'chicken' && other.variant !== 'deer') continue;
+    const d = dist(e.x, e.y, other.x, other.y);
+    if (d < bestD && hasLineOfSight(zone.map, e.x, e.y, other.x, other.y)) {
+      best = other;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * Ambient critters (chickens, deer): peck and graze, but bolt from any
+ * predator that wanders too close. Deer are skittish and flee players too.
+ */
+function tickCritter(zone: Zone, e: Entity, dt: number, now: number): void {
+  const ai = e.ai!;
+  const isDeer = e.variant === 'deer';
+  const senseRange = isDeer ? 10 : 6;
+
+  if (now >= ai.nextThink) {
+    ai.nextThink = now + 250 + Math.random() * 250;
+    let threat = scanForTarget(zone, e, senseRange, 'monsters');
+    if (!threat && isDeer) threat = scanForTarget(zone, e, senseRange, 'players');
+    ai.targetId = threat ? threat.id : undefined;
+  }
+
+  const threat = ai.targetId ? zone.entities.get(ai.targetId) : undefined;
+  if (threat && !threat.dead && dist(e.x, e.y, threat.x, threat.y) < senseRange + 2) {
+    // Sprint directly away from the threat.
+    const ang = Math.atan2(e.y - threat.y, e.x - threat.x);
+    const flee = e.speed;
+    e.speed = flee * (isDeer ? 3.4 : 2.4); // panic burst
+    moveToward(zone, e, e.x + Math.cos(ang) * 6, e.y + Math.sin(ang) * 6, dt, now);
+    e.speed = flee;
+    return;
+  }
+  ai.targetId = undefined;
+  wanderOrIdle(zone, e, dt, now);
+}
+
 function tryAttack(host: AiHost, zone: Zone, e: Entity, target: Entity, def: MonsterDef, now: number): void {
   if (now < (e.attackCooldownUntil ?? 0)) return;
   e.attackCooldownUntil = now + def.attackCooldownMs;
@@ -209,6 +256,12 @@ function tickMonster(host: AiHost, zone: Zone, e: Entity, dt: number, now: numbe
   if (!target && now >= ai.nextThink) {
     ai.nextThink = now + 250 + Math.random() * 200;
     target = scanForTarget(zone, e, aggro, 'players');
+    if (!target) {
+      // No prey worth the name? Predators still hunt critters. Wolves range
+      // wider and give chase eagerly; others only pounce on what's underfoot.
+      const preyRange = e.variant === 'wolf' ? aggro * 1.15 : aggro * 0.6;
+      target = scanForPrey(zone, e, preyRange);
+    }
     if (target) {
       ai.targetId = target.id;
       ai.mode = 'chase';

@@ -54,6 +54,14 @@ export interface PropDef {
   y: number;
 }
 
+/** A wilderness landmark. World coordinates. */
+export interface PoiDef {
+  kind: 'shrine' | 'obelisk' | 'ruin';
+  x: number;
+  y: number;
+  text?: string; // lore shown on interact (obelisks/shrines)
+}
+
 export interface OverworldData {
   map: TileMap;
   villages: VillageDef[];
@@ -64,6 +72,8 @@ export interface OverworldData {
   torches: Vec2[];
   /** Decorative props that make settlements feel lived-in. */
   props: PropDef[];
+  /** Wilderness landmarks — shrines, obelisks, ruins. */
+  pois: PoiDef[];
 }
 
 const VILLAGE_NAMES = [
@@ -75,8 +85,20 @@ const PORTAL_NAMES = [
   'Catacombs of Vhal', 'The Sunken Halls', 'Maw of Cinders', 'Barrow of Kings',
 ];
 
-export const OVERWORLD_W = 176;
-export const OVERWORLD_H = 176;
+export const OVERWORLD_W = 240;
+export const OVERWORLD_H = 240;
+
+const OBELISK_LORE = [
+  'Weathered runes: "Here the first lantern was lit against the long dark."',
+  'The stone reads: "Traveler — the deep remembers every name it takes."',
+  'Faint carving: "Six villages, one vigil. Keep the roads."',
+  'Ancient script: "When the sky tears, stand fast and do not look within."',
+];
+const SHRINE_LINES = [
+  'You kneel at the shrine. Warmth spreads through your limbs.',
+  'The shrine glows softly. Your wounds close and your spirit lifts.',
+  'A calm settles over you as the shrine answers your prayer.',
+];
 
 /**
  * Generate the overworld deterministically from a seed. Client and server both
@@ -95,14 +117,14 @@ export function generateOverworld(seed: number): OverworldData {
   }
 
   // --- scatter terrain features: forests, rock outcrops, ponds
-  scatterBlobs(rng, map, Tile.Tree, 90, 2, 5);
-  scatterBlobs(rng, map, Tile.Rock, 25, 1, 3);
-  scatterBlobs(rng, map, Tile.Water, 14, 2, 4);
+  scatterBlobs(rng, map, Tile.Tree, 160, 2, 6);
+  scatterBlobs(rng, map, Tile.Rock, 44, 1, 3);
+  scatterBlobs(rng, map, Tile.Water, 26, 2, 5);
 
   // --- villages, spread apart
   const villages: VillageDef[] = [];
-  const villageCount = 4;
-  const spots = pickSpreadPoints(rng, map, villageCount, 55, 24);
+  const villageCount = 6;
+  const spots = pickSpreadPoints(rng, map, villageCount, 52, 26);
   for (let i = 0; i < spots.length; i++) {
     villages.push(buildVillage(rng, map, torches, i, spots[i].x, spots[i].y));
   }
@@ -153,6 +175,38 @@ export function generateOverworld(seed: number): OverworldData {
     portals.push({ id: i, name: PORTAL_NAMES[i], tx: x, ty: y, level: 2 + i * 3 });
   }
 
+  // --- wilderness landmarks: shrines, obelisks and ruins, out in the wilds
+  // away from villages/camps/portals. These give the overworld destinations.
+  const pois: PoiDef[] = [];
+  const poiKinds: PoiDef['kind'][] = ['shrine', 'shrine', 'shrine', 'obelisk', 'obelisk', 'obelisk', 'ruin', 'ruin', 'ruin'];
+  const poiSpots = pickSpreadPoints(rng, map, poiKinds.length, 30, 12, (x, y) =>
+    villages.every((v) => dist(x, y, v.cx, v.cy) > v.radius + 10) &&
+    camps.every((c) => dist(x, y, c.cx, c.cy) > c.radius + 8) &&
+    portals.every((p) => dist(x, y, p.tx, p.ty) > 12)
+  );
+  let obeliskN = 0;
+  let shrineN = 0;
+  for (let i = 0; i < poiSpots.length; i++) {
+    const { x, y } = poiSpots[i];
+    const kind = poiKinds[i];
+    const c = tileCenter(x, y);
+    if (kind === 'ruin') {
+      // A ruined structure: broken walls around a cleared floor, with a torch.
+      clearArea(map, x, y, 4, Tile.Floor);
+      carveRuinWalls(rng, map, x, y);
+      torches.push(c);
+      pois.push({ kind, x: c.x, y: c.y });
+    } else if (kind === 'obelisk') {
+      clearArea(map, x, y, 2);
+      torches.push(c);
+      pois.push({ kind, x: c.x, y: c.y, text: OBELISK_LORE[obeliskN++ % OBELISK_LORE.length] });
+    } else {
+      clearArea(map, x, y, 2);
+      torches.push(c);
+      pois.push({ kind, x: c.x, y: c.y, text: SHRINE_LINES[shrineN++ % SHRINE_LINES.length] });
+    }
+  }
+
   // --- terrain elevation: rolling hills across the wilds, flattened around
   // settlements, roads and portals so gameplay spaces stay level.
   const hn = makeNoise2D(hashSeed(seed, 7), 20);
@@ -173,6 +227,7 @@ export function generateOverworld(seed: number): OverworldData {
   };
   for (const v of villages) flatten(v.cx, v.cy, v.radius + 5);
   for (const p of portals) flatten(p.tx, p.ty, 6);
+  for (const poi of pois) flatten(poi.x / 2 - 0.5, poi.y / 2 - 0.5, poi.kind === 'ruin' ? 5 : 3);
 
   // --- decorative props scattered around each village to make it lived-in
   const props: PropDef[] = [];
@@ -190,7 +245,18 @@ export function generateOverworld(seed: number): OverworldData {
     }
   }
 
-  return { map, villages, camps, portals, roads, torches, props };
+  return { map, villages, camps, portals, roads, torches, props, pois };
+}
+
+/** Carve a rough ring of broken wall tiles around a ruin center. */
+function carveRuinWalls(rng: Rng, map: TileMap, cx: number, cy: number) {
+  const r = 4;
+  for (let a = 0; a < Math.PI * 2; a += 0.18) {
+    if (rng.chance(0.35)) continue; // gaps = "broken"
+    const tx = Math.round(cx + Math.cos(a) * r);
+    const ty = Math.round(cy + Math.sin(a) * r);
+    if (map.inBounds(tx, ty) && map.get(tx, ty) === Tile.Floor) map.set(tx, ty, Tile.Wall);
+  }
 }
 
 function scatterBlobs(rng: Rng, map: TileMap, tile: Tile, count: number, rMin: number, rMax: number) {

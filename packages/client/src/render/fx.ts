@@ -152,6 +152,11 @@ export class FxManager {
     this.spawnBurst(x, 0.15, z, 10, 0xb9a888, { speed: 2.2, size: 0.35, ttl: 0.5, gravity: 1.5, drag: 3.5, soft: true });
   }
 
+  /** A puff of drifting feathers — a critter meeting its end. */
+  feathers(x: number, z: number, color = 0xf4f0e8): void {
+    this.spawnBurst(x, 0.9, z, 12, color, { speed: 2.6, size: 0.26, ttl: 1.3, gravity: 1.1, drag: 2.6, soft: true });
+  }
+
   /** Rising purple motes — a hovering wizard's arcane wake. */
   magicTrail(x: number, z: number): void {
     this.spawnBurst(x, 0.9, z, 3, 0xb060ff, { speed: 1.1, size: 0.3, ttl: 0.75, gravity: -0.5, drag: 1.8 });

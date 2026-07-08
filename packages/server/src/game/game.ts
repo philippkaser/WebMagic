@@ -331,6 +331,14 @@ export class GameServer implements AiHost {
     const now = this.now();
     this.broadcastFx(zone, { t: 'fx', kind: 'death', x: victim.x, y: victim.y, entId: victim.id });
 
+    // Critters go out in a puff of feathers (deer, more of a russet burst).
+    if (victim.kind === 'npc' && (victim.variant === 'chicken' || victim.variant === 'deer')) {
+      this.broadcastFx(zone, {
+        t: 'fx', kind: 'feathers', x: victim.x, y: victim.y,
+        color: victim.variant === 'deer' ? 0xb07a4a : 0xf4f0e8,
+      });
+    }
+
     if (victim.kind === 'player') {
       const player = this.playerByEntityId(victim.id);
       if (player) this.onPlayerDied(player, zone);
@@ -732,6 +740,26 @@ export class GameServer implements AiHost {
     if (target.variant === 'chicken') {
       this.notify(player, `The chicken squawks: "${this.lootRng.pick(['Bwak!', 'Cluck!', 'Bok bok!'])}"`, 'info');
       this.broadcastFx(zone, { t: 'fx', kind: 'pickup', x: target.x, y: target.y });
+      return;
+    }
+    if (target.variant === 'shrine') {
+      const now = this.now();
+      if (now < player.shrineCdUntil) {
+        this.notify(player, 'The shrine is quiet. It has already blessed you.', 'info');
+        return;
+      }
+      player.shrineCdUntil = now + 45_000;
+      const ent = player.entity;
+      zone.heal(this, ent, player.stats.maxHp); // full restore
+      player.mp = player.stats.maxMp;
+      player.blessUntil = now + 30_000; // 30s of +25% damage
+      this.notify(player, target.interactText ?? 'The shrine blesses you.', 'info');
+      this.notify(player, 'Blessing of the shrine: your strikes are empowered.', 'loot');
+      this.broadcastFx(zone, { t: 'fx', kind: 'heal', x: ent.x, y: ent.y });
+      return;
+    }
+    if (target.variant === 'obelisk') {
+      this.notify(player, target.interactText ?? 'The obelisk is worn smooth by the ages.', 'info');
       return;
     }
   }

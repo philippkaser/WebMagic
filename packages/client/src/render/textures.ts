@@ -1168,6 +1168,46 @@ function drawCampfire(): HTMLCanvasElement {
   return c;
 }
 
+function drawShrine(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(16, 22);
+  // stone base + pedestal
+  px(2, 18, 12, 3, '#6f6a63');
+  px(2, 18, 12, 1, '#8a857c');
+  px(4, 13, 8, 5, '#7d7870');
+  px(4, 13, 2, 5, '#5f5a53');
+  px(4, 13, 8, 1, '#98938a');
+  // carved arch
+  px(5, 4, 6, 9, '#877f74');
+  px(5, 4, 2, 9, '#6b6459');
+  px(6, 2, 4, 3, '#948b7e');
+  // glowing crystal in the niche
+  px(6, 6, 4, 5, '#66ffcc');
+  px(7, 5, 2, 2, '#b8fff0');
+  px(7, 7, 2, 2, '#9affe0');
+  px(6, 10, 4, 1, '#33ddaa');
+  return c;
+}
+
+function drawObelisk(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(12, 24);
+  // stepped base
+  px(2, 21, 8, 3, '#4a4642');
+  px(3, 19, 6, 2, '#565049');
+  // tapering shaft
+  px(4, 3, 4, 16, '#6b6459');
+  px(4, 3, 1, 16, '#544e45'); // shaded side
+  px(7, 3, 1, 16, '#7d7568'); // lit side
+  px(4, 3, 4, 1, '#8a8072');
+  // pyramidion tip
+  px(5, 1, 2, 2, '#948b7e');
+  // glowing runes down the face
+  px(5, 6, 2, 1, '#8a6bff');
+  px(5, 9, 2, 1, '#a48bff');
+  px(5, 12, 2, 1, '#8a6bff');
+  px(5, 15, 2, 1, '#a48bff');
+  return c;
+}
+
 function drawChicken(): HTMLCanvasElement {
   const [c, px] = pixelPainter(12, 10);
   px(3, 4, 6, 4, '#f2f2f2'); // body
@@ -1179,6 +1219,33 @@ function drawChicken(): HTMLCanvasElement {
   px(8, 3, 2, 3, '#e8e8e8'); // tail
   px(4, 8, 1, 2, '#f0a020'); // legs
   px(6, 8, 1, 2, '#f0a020');
+  return c;
+}
+
+function drawDeer(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(18, 16);
+  // body
+  px(4, 6, 9, 4, '#9a6a3a');
+  px(4, 6, 9, 1, '#b3824a'); // sunlit back
+  px(4, 9, 9, 1, '#7a5228'); // belly shadow
+  // haunch + chest shading
+  px(11, 6, 2, 4, '#8a5e30');
+  // neck + head
+  px(12, 3, 3, 3, '#9a6a3a');
+  px(14, 2, 3, 3, '#a5723e'); // head
+  px(16, 3, 1, 1, '#5a3d22'); // nose
+  px(15, 3, 1, 1, '#221a12'); // eye
+  // antlers
+  px(14, 0, 1, 2, '#d8c8a8');
+  px(13, 0, 1, 1, '#d8c8a8');
+  px(16, 0, 1, 2, '#d8c8a8');
+  // white tail
+  px(3, 6, 1, 2, '#f0ece0');
+  // legs
+  px(5, 10, 1, 4, '#6b4a28');
+  px(7, 10, 1, 4, '#7a5228');
+  px(10, 10, 1, 4, '#6b4a28');
+  px(12, 10, 1, 4, '#7a5228');
   return c;
 }
 
@@ -1355,10 +1422,25 @@ export function spriteDef(variant: string): SpriteDef {
         w = 0.6;
         h = 0.5;
         break;
+      case 'deer':
+        canvas = drawDeer();
+        w = 1.5;
+        h = 1.3;
+        break;
       case 'signpost':
         canvas = drawSignpost();
         w = 1.1;
         h = 1.4;
+        break;
+      case 'shrine':
+        canvas = drawShrine();
+        w = 1.6;
+        h = 2.2;
+        break;
+      case 'obelisk':
+        canvas = drawObelisk();
+        w = 1.2;
+        h = 2.6;
         break;
       case 'campfire':
         canvas = drawCampfire();

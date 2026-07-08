@@ -46,9 +46,12 @@ test('different seeds produce different worlds', () => {
 
 test('overworld has the expected landmarks and a solid border', () => {
   const w = generateOverworld(555);
-  assert.equal(w.villages.length, 4);
+  assert.equal(w.villages.length, 6);
   assert.equal(w.portals.length, 4);
   assert.ok(w.camps.length > 0);
+  assert.ok(w.pois.length > 0, 'wilderness landmarks exist');
+  assert.ok(w.pois.some((p) => p.kind === 'shrine'), 'has a shrine');
+  assert.ok(w.pois.some((p) => p.kind === 'obelisk'), 'has an obelisk');
   // Border ring is blocking so players cannot walk off the map.
   assert.ok(w.map.blockedTile(0, 0), 'corner is walled');
   assert.ok(w.map.blockedTile(w.map.w - 1, w.map.h - 1), 'far corner is walled');

@@ -272,6 +272,9 @@ function startGame(
       case 'pickup':
         renderer.fx.damageNumber(msg.x, msg.y, '+', '#d8b45a');
         break;
+      case 'feathers':
+        renderer.fx.feathers(msg.x, msg.y, msg.color);
+        break;
     }
   }
 

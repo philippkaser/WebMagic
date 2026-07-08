@@ -198,6 +198,34 @@ export class WorldSim {
       });
     }
 
+    // Wild deer: small herds grazing out in the wilds, well away from towns.
+    // They flee anything that moves — prey for wolves, a chase for players.
+    const herds = this.rng.int(4, 6);
+    for (let h = 0; h < herds; h++) {
+      let spot: Vec2 | null = null;
+      for (let tries = 0; tries < 20; tries++) {
+        const p = tileCenter(
+          this.rng.int(16, this.world.map.w - 16),
+          this.rng.int(16, this.world.map.h - 16)
+        );
+        if (this.world.map.blockedAtWorld(p.x, p.y)) continue;
+        if (this.world.villages.some((v) => {
+          const vc = tileCenter(v.cx, v.cy);
+          return dist(p.x, p.y, vc.x, vc.y) < 24;
+        })) continue;
+        spot = p;
+        break;
+      }
+      if (!spot) continue;
+      const herdSize = this.rng.int(2, 4);
+      for (let i = 0; i < herdSize; i++) {
+        const d = this.openSpot(spot.x, spot.y, 6);
+        const deer = spawnCritter(this.zone, 'deer', d.x, d.y);
+        deer.speed = 2.4; // deer graze at a decent clip
+        if (deer.ai) deer.ai.wanderRadius = 8;
+      }
+    }
+
     // Monster camps
     for (const camp of this.world.camps) {
       const def = MONSTERS[camp.monster];
@@ -217,6 +245,40 @@ export class WorldSim {
     for (const p of this.world.portals) {
       const c = tileCenter(p.tx, p.ty);
       spawnPortal(this.zone, c.x, c.y, `${p.name} (Lv ${p.level}+)`, p.id, 'dungeon-entrance');
+    }
+
+    // Wilderness landmarks: shrines to rest at, obelisks to read, and ruins
+    // guarded by monsters (with a chance of buried loot).
+    for (const poi of this.world.pois) {
+      if (poi.kind === 'shrine') {
+        spawnFixture(this.zone, 'shrine', poi.x, poi.y, {
+          name: 'Wayside Shrine',
+          interactText: poi.text,
+          light: 0x66ffcc,
+        });
+      } else if (poi.kind === 'obelisk') {
+        spawnFixture(this.zone, 'obelisk', poi.x, poi.y, {
+          name: 'Ancient Obelisk',
+          interactText: poi.text,
+          light: 0x8a6bff,
+        });
+      } else {
+        // Ruin: a couple of guardian monsters lurking among the broken walls.
+        const guard = this.rng.pick(['goblin', 'orc', 'skeleton'] as const);
+        const n = this.rng.int(2, 3);
+        for (let i = 0; i < n; i++) {
+          spawnMonster(
+            this.zone,
+            MONSTERS[guard],
+            poi.x + this.rng.range(-3, 3),
+            poi.y + this.rng.range(-3, 3)
+          );
+        }
+        spawnFixture(this.zone, 'obelisk', poi.x, poi.y, {
+          name: 'Ruined Marker',
+          interactText: 'Crumbling stones — whatever stood here fell long ago.',
+        });
+      }
     }
 
     this.nextCaravanAt = now + 20_000;

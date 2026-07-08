@@ -79,6 +79,8 @@ export function castSkill(
   // 10% crits keep combat spicy
   const crit = Math.random() < 0.1;
   if (crit) power *= 1.5;
+  // A shrine's blessing empowers the faithful for a short while.
+  if (now < player.blessUntil) power *= 1.25;
 
   switch (def.kind) {
     case 'melee': {
