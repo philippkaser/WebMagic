@@ -981,6 +981,61 @@ function drawPortal(color1: string, color2: string): HTMLCanvasElement {
   return c;
 }
 
+/** A high-res swirling vortex for portals — bright core, spiral arms. */
+function drawPortalSwirl(inner: string, arm: string): HTMLCanvasElement {
+  const S = 160;
+  const [c, ctx] = makeCanvas(S, S);
+  const cx = S / 2;
+  const cy = S / 2;
+  // glowing core
+  const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, S / 2);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.18, inner);
+  g.addColorStop(0.6, arm);
+  g.addColorStop(1, arm + '00');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, S / 2, 0, Math.PI * 2);
+  ctx.fill();
+  // spiral arms drawn additively
+  ctx.globalCompositeOperation = 'lighter';
+  const arms = 4;
+  for (let a = 0; a < arms; a++) {
+    ctx.strokeStyle = a % 2 ? '#ffffff' : inner;
+    ctx.lineWidth = 3;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    for (let t = 0; t < 1; t += 0.02) {
+      const ang = (a / arms) * Math.PI * 2 + t * Math.PI * 3.2;
+      const r = t * (S / 2 - 4);
+      const x = cx + Math.cos(ang) * r;
+      const y = cy + Math.sin(ang) * r;
+      if (t === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  return c;
+}
+
+const portalSwirlCache = new Map<string, THREE.Texture>();
+
+/** Cached, spinnable swirl texture for a portal effect. */
+export function portalSwirlTexture(kind: 'portal' | 'portal-exit'): THREE.Texture {
+  let tex = portalSwirlCache.get(kind);
+  if (tex) return tex;
+  const canvas = kind === 'portal-exit'
+    ? drawPortalSwirl('#66ddff', '#2b6fd8')
+    : drawPortalSwirl('#c07bff', '#7a2bd8');
+  tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.center.set(0.5, 0.5); // spin around the middle
+  portalSwirlCache.set(kind, tex);
+  return tex;
+}
+
 function drawOrb(inner: string, outer: string): HTMLCanvasElement {
   const [c] = pixelPainter(8, 8);
   const ctx = c.getContext('2d')!;
@@ -1109,6 +1164,7 @@ export function spriteDef(variant: string): SpriteDef {
         w = 2.6;
         h = 2.1;
         break;
+      // NOTE: portals are drawn by PortalFx (render/portals.ts), not as sprites.
       case 'portal':
         canvas = drawPortal('#9944ff', '#5522aa');
         w = 2.6;

@@ -6,6 +6,7 @@ import { LevelMesh } from './level';
 import { LightPool, LightCandidate } from './lights';
 import { EntitySprites } from './sprites';
 import { FxManager } from './fx';
+import { PortalFx, type PortalTarget } from './portals';
 import { spriteDef } from './textures';
 
 /** Render at 1/N resolution and upscale — the chunky retro look. */
@@ -31,6 +32,7 @@ export class GameRenderer {
   private level: LevelMesh | null = null;
   private torchFlames: THREE.Mesh[] = [];
   readonly sprites = new EntitySprites();
+  readonly portalFx = new PortalFx();
   readonly fx: FxManager;
   private bobPhase = 0;
   private lastNowSec = 0;
@@ -99,6 +101,7 @@ export class GameRenderer {
 
     this.lights = new LightPool(this.scene);
     this.scene.add(this.sprites.group);
+    this.scene.add(this.portalFx.group);
 
     // Three orbiting fireball orbs (shown only with the Cinder Orbit passive).
     for (let i = 0; i < 3; i++) {
@@ -138,6 +141,7 @@ export class GameRenderer {
     }
     this.torchFlames = [];
     this.sprites.clear();
+    this.portalFx.clear();
     this.fx.clear();
     if (!state.map || !state.zone) return;
 
@@ -227,6 +231,16 @@ export class GameRenderer {
 
     // --- entities + their emitted light
     this.sprites.sync(state, now, this.camera.position.x, this.camera.position.z);
+
+    // fancy animated portals (drawn instead of a flat billboard)
+    const portals: PortalTarget[] = [];
+    for (const e of state.entities.values()) {
+      if (e.latest.k !== 'portal' || e.latest.a === 'dead') continue;
+      const sp = state.sample(e, now);
+      portals.push({ id: e.latest.id, x: sp.x, y: sp.y, variant: e.latest.v });
+    }
+    const elevFn = (x: number, y: number) => (state.map ? state.map.elevationAtWorld(x, y) : 0);
+    this.portalFx.sync(portals, now, this.camera.position.x, this.camera.position.z, elevFn);
     const dynamics: LightCandidate[] = [];
     for (const e of state.entities.values()) {
       const lt = e.latest.lt;

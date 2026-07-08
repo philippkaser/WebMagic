@@ -34,6 +34,7 @@ export class EntitySprites {
     const seen = new Set<number>();
 
     for (const [id, e] of state.entities) {
+      if (e.latest.k === 'portal') continue; // portals are drawn by PortalFx
       seen.add(id);
       const key = spriteKey(e.latest.v, id);
       let inst = this.instances.get(id);
@@ -96,11 +97,6 @@ export class EntitySprites {
         } else {
           setTint(inst, 0xffffff);
         }
-      }
-      // portals slowly pulse
-      if (e.latest.k === 'portal') {
-        const s = 1 + Math.sin(now * 0.002 + id) * 0.06;
-        inst.mesh.scale.set(s, s, 1);
       }
     }
 
