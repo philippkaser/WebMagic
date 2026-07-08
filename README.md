@@ -58,8 +58,13 @@ sudo setcap 'cap_net_bind_service=+ep' "$(command -v node)"
 (For HTTPS put a reverse proxy like Caddy or nginx in front and forward `/` and
 `/ws` to this server; the client automatically uses `wss:` on https pages.)
 
-**Controls:** WASD move · mouse (pointer lock) or arrow keys turn · left click / `1`-`2`
+**Controls:** WASD move · **`Shift` sprint** (drains stamina) · **`Space` jump** ·
+mouse (pointer lock) free-look in every direction, or arrow keys turn · left click / `1`-`2`
 skills · `E` interact · `I` inventory & character sheet · `Enter` chat (`/l ` prefix = local chat).
+
+Jump feels different per class: the **Knight** holds `Space` to charge a crouch and
+releases for a big leap, the **Wizard** taps `Space` again in the air to hover, and the
+**Warrior** gets a mid-air double jump.
 
 **Server env:** `PORT` (default 80; dev script uses 8080), `WORLD_SEED` (a new seed
 is a whole new world), `DATA_DIR`, `CLIENT_DIST`, `MAX_CONNECTIONS`, `DEV_COMMANDS=0`
@@ -67,6 +72,11 @@ to disable the `/goto` and `/xp` dev commands.
 
 ## What's in the game right now
 
+- **Movement with feel** — sprint with a stamina budget, free-look mouse camera, and a
+  jump whose flavor depends on your class (Knight charge-jump, Wizard hover, Warrior
+  double-jump). Vertical motion and stamina run through one shared physics module
+  (`shared/movement.ts`) simulated identically on client and server, so your own jumps
+  feel instant and other players see them too.
 - **Three classes** — Warrior, Wizard, Knight — each with a passive, a primary attack
   and an unlockable second skill (Whirlwind, Frost Nova, Holy Light), levels, XP and
   attribute growth.

@@ -15,6 +15,9 @@ import {
   xpForLevel,
   zeroBonuses,
   PLAYER_RADIUS,
+  STAMINA_MAX,
+  VerticalState,
+  newVerticalState,
 } from '@webmagic/shared';
 import { Entity, allocEntityId } from './entities';
 
@@ -57,6 +60,10 @@ export class Player {
 
   cooldowns = new Map<SkillId, number>();
   lastInputSeq = 0;
+  // --- movement gamefeel (see shared/movement.ts)
+  vert: VerticalState = newVerticalState();
+  stamina = STAMINA_MAX;
+  sprintHeld = false;
   zoneId = 'overworld';
   dungeonRun: DungeonRunState | null = null;
   respawnAt = 0;

@@ -24,10 +24,12 @@ export interface InterpEntity {
   prevX: number;
   prevY: number;
   prevF: number;
+  prevZ: number;
   prevT: number;
   nextX: number;
   nextY: number;
   nextF: number;
+  nextZ: number;
   nextT: number;
 }
 
@@ -36,6 +38,7 @@ interface PendingInput {
   mx: number;
   my: number;
   dt: number; // seconds
+  spdMul: number; // sprint/charge speed factor at the time (keeps replay exact)
 }
 
 export interface OutgoingInput {
@@ -43,6 +46,7 @@ export interface OutgoingInput {
   mx: number;
   my: number;
   dt: number; // ms
+  sprint: boolean;
 }
 
 /**
@@ -90,19 +94,19 @@ export class WorldState {
    * Apply this frame's movement locally (instant response) and return a chunk
    * to transmit when one is complete.
    */
-  move(mx: number, my: number, dtSec: number): OutgoingInput | null {
+  move(mx: number, my: number, dtSec: number, spdMul = 1): OutgoingInput | null {
     dtSec = Math.min(dtSec, 0.06); // mirror the server's per-input clamp
     let flushed: OutgoingInput | null = null;
-    const dirChanged = this.open && (this.open.mx !== mx || this.open.my !== my);
-    if (this.open && (dirChanged || this.open.dt + dtSec > CHUNK_MS / 1000)) {
+    const changed = this.open && (this.open.mx !== mx || this.open.my !== my || this.open.spdMul !== spdMul);
+    if (this.open && (changed || this.open.dt + dtSec > CHUNK_MS / 1000)) {
       flushed = this.flush();
     }
     if (mx !== 0 || my !== 0) {
       if (!this.open) {
-        this.open = { seq: ++this.seq, mx, my, dt: 0 };
+        this.open = { seq: ++this.seq, mx, my, dt: 0, spdMul };
       }
       this.open.dt += dtSec;
-      this.applyMove(mx, my, dtSec);
+      this.applyMove(mx, my, dtSec, spdMul);
     }
     return flushed;
   }
@@ -114,12 +118,13 @@ export class WorldState {
     // server clamps dt to 60ms — mirror that so prediction stays exact
     c.dt = Math.min(c.dt, 0.06);
     this.pending.push(c);
-    return { seq: c.seq, mx: c.mx, my: c.my, dt: Math.round(c.dt * 1000) };
+    return { seq: c.seq, mx: c.mx, my: c.my, dt: Math.round(c.dt * 1000), sprint: c.spdMul > 1 };
   }
 
-  private applyMove(mx: number, my: number, dtSec: number): void {
+  private applyMove(mx: number, my: number, dtSec: number, spdMul: number): void {
     if (!this.map || this.self?.dead) return;
-    const res = moveWithCollision(this.map, this.x, this.y, mx * this.speed * dtSec, my * this.speed * dtSec, PLAYER_RADIUS);
+    const s = this.speed * spdMul;
+    const res = moveWithCollision(this.map, this.x, this.y, mx * s * dtSec, my * s * dtSec, PLAYER_RADIUS);
     this.x = res.x;
     this.y = res.y;
   }
@@ -136,12 +141,14 @@ export class WorldState {
     let py = snap.self.y;
     if (this.map && !snap.self.dead) {
       for (const p of this.pending) {
-        const r = moveWithCollision(this.map, px, py, p.mx * this.speed * p.dt, p.my * this.speed * p.dt, PLAYER_RADIUS);
+        const s = this.speed * p.spdMul;
+        const r = moveWithCollision(this.map, px, py, p.mx * s * p.dt, p.my * s * p.dt, PLAYER_RADIUS);
         px = r.x;
         py = r.y;
       }
       if (this.open) {
-        const r = moveWithCollision(this.map, px, py, this.open.mx * this.speed * this.open.dt, this.open.my * this.speed * this.open.dt, PLAYER_RADIUS);
+        const s = this.speed * this.open.spdMul;
+        const r = moveWithCollision(this.map, px, py, this.open.mx * s * this.open.dt, this.open.my * s * this.open.dt, PLAYER_RADIUS);
         px = r.x;
         py = r.y;
       }
@@ -162,17 +169,19 @@ export class WorldState {
       if (!cur) {
         this.entities.set(e.id, {
           latest: e,
-          prevX: e.x, prevY: e.y, prevF: e.f, prevT: now,
-          nextX: e.x, nextY: e.y, nextF: e.f, nextT: now,
+          prevX: e.x, prevY: e.y, prevF: e.f, prevZ: e.z ?? 0, prevT: now,
+          nextX: e.x, nextY: e.y, nextF: e.f, nextZ: e.z ?? 0, nextT: now,
         });
       } else {
         cur.prevX = cur.nextX;
         cur.prevY = cur.nextY;
         cur.prevF = cur.nextF;
+        cur.prevZ = cur.nextZ;
         cur.prevT = cur.nextT;
         cur.nextX = e.x;
         cur.nextY = e.y;
         cur.nextF = e.f;
+        cur.nextZ = e.z ?? 0;
         cur.nextT = now;
         cur.latest = e;
       }
@@ -181,10 +190,10 @@ export class WorldState {
   }
 
   /** Interpolated render position for a remote entity. */
-  sample(e: InterpEntity, now: number): { x: number; y: number; f: number } {
+  sample(e: InterpEntity, now: number): { x: number; y: number; f: number; z: number } {
     const t = now - INTERP_DELAY_MS;
     const span = e.nextT - e.prevT;
-    if (span <= 0 || t >= e.nextT) return { x: e.nextX, y: e.nextY, f: e.nextF };
+    if (span <= 0 || t >= e.nextT) return { x: e.nextX, y: e.nextY, f: e.nextF, z: e.nextZ };
     const a = Math.max(0, Math.min(1, (t - e.prevT) / span));
     let df = e.nextF - e.prevF;
     if (df > Math.PI) df -= Math.PI * 2;
@@ -193,6 +202,7 @@ export class WorldState {
       x: e.prevX + (e.nextX - e.prevX) * a,
       y: e.prevY + (e.nextY - e.prevY) * a,
       f: e.prevF + df * a,
+      z: e.prevZ + (e.nextZ - e.prevZ) * a,
     };
   }
 

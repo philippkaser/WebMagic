@@ -2,8 +2,11 @@
  * Keyboard + pointer-lock mouse input. Produces a movement intent in world
  * space each frame; casting/interacting are edge-triggered callbacks.
  */
+const PITCH_LIMIT = 1.2; // radians up/down before the neck breaks
+
 export class Input {
   yaw = 0; // camera yaw, radians (0 = looking along +X)
+  pitch = 0; // camera pitch, radians (+ looks up)
   private keys = new Set<string>();
   private canvas: HTMLCanvasElement;
 
@@ -11,6 +14,7 @@ export class Input {
   onInteract: () => void = () => {};
   onToggleInventory: () => void = () => {};
   onOpenChat: (initial?: string) => void = () => {};
+  onJump: (phase: 'down' | 'up') => void = () => {};
   /** UI can suppress game input while typing. */
   isTyping: () => boolean = () => false;
 
@@ -20,6 +24,12 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       if (this.isTyping()) return;
       const k = e.key.toLowerCase();
+      if (k === ' ') {
+        e.preventDefault();
+        if (!e.repeat) this.onJump('down'); // ignore key-repeat while held
+        this.keys.add(k);
+        return;
+      }
       this.keys.add(k);
       if (k === 'e') this.onInteract();
       if (k === 'i' || k === 'tab') { e.preventDefault(); this.onToggleInventory(); }
@@ -27,7 +37,11 @@ export class Input {
       if (k === '/') { e.preventDefault(); this.onOpenChat('/'); }
       if (k >= '1' && k <= '4') this.onCast(Number(k) - 1);
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      this.keys.delete(k);
+      if (k === ' ') this.onJump('up');
+    });
     window.addEventListener('blur', () => this.keys.clear());
 
     canvas.addEventListener('click', () => {
@@ -44,11 +58,19 @@ export class Input {
     window.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement !== this.canvas) return;
       this.yaw -= e.movementX * 0.0028;
+      this.pitch -= e.movementY * 0.0024;
+      if (this.pitch > PITCH_LIMIT) this.pitch = PITCH_LIMIT;
+      if (this.pitch < -PITCH_LIMIT) this.pitch = -PITCH_LIMIT;
     });
   }
 
   get pointerLocked(): boolean {
     return document.pointerLockElement === this.canvas;
+  }
+
+  /** Sprint modifier held (shift), unless the chat box has focus. */
+  get sprinting(): boolean {
+    return !this.isTyping() && this.keys.has('shift');
   }
 
   /**

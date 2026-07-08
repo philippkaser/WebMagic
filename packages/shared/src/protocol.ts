@@ -34,6 +34,8 @@ export interface EntitySnapshot {
   lvl?: number;
   /** Emitted light color as 0xRRGGBB — drives reactive lighting client-side. */
   lt?: number;
+  /** Height above the ground in meters (jumping). Omitted when on the ground. */
+  z?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,6 +62,14 @@ export interface InputMsg {
   f: number;
   /** Client frame delta in ms (server clamps). */
   dt: number;
+  /** Sprint held this chunk (drains stamina, faster move). */
+  sprint?: boolean;
+}
+
+export interface JumpMsg {
+  t: 'jump';
+  /** Key edge: 'down' on press (jump/charge/hover), 'up' on release. */
+  phase: 'down' | 'up';
 }
 
 export interface CastMsg {
@@ -108,6 +118,7 @@ export interface PingMsg {
 export type ClientMessage =
   | HelloMsg
   | InputMsg
+  | JumpMsg
   | CastMsg
   | ChatMsg
   | InteractMsg
@@ -167,6 +178,9 @@ export interface SelfState {
   /** Dungeon progress (floors completed in current run). */
   floorsDone?: number;
   slowUntil?: number;
+  /** Sprint stamina, 0..maxStam. */
+  stam: number;
+  maxStam: number;
 }
 
 export interface SnapshotMsg {

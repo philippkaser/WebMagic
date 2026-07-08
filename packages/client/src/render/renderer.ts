@@ -132,7 +132,7 @@ export class GameRenderer {
     }
   }
 
-  render(state: WorldState, input: Input, now: number, dt: number, moving: boolean): void {
+  render(state: WorldState, input: Input, now: number, dt: number, moving: boolean, camZ = 0): void {
     const isDungeon = state.zone?.kind === 'dungeon';
 
     // --- day/night atmosphere
@@ -181,8 +181,9 @@ export class GameRenderer {
     // --- camera
     this.bobPhase = moving ? this.bobPhase + dt * 9 : 0;
     const bob = Math.sin(this.bobPhase) * 0.045;
-    this.camera.position.set(state.x, EYE_HEIGHT + bob, state.y);
+    this.camera.position.set(state.x, EYE_HEIGHT + bob + camZ, state.y);
     this.camera.rotation.y = input.yaw - Math.PI / 2;
+    this.camera.rotation.x = input.pitch;
 
     // --- entities + their emitted light
     this.sprites.sync(state, now, this.camera.position.x, this.camera.position.z);

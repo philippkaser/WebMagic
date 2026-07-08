@@ -16,7 +16,14 @@ import {
   TILE_SIZE,
   SNAPSHOT_EVERY,
   SkillId,
+  STAMINA_MAX,
   TICK_MS,
+  isCharging,
+  jumpPress,
+  jumpRelease,
+  speedMultiplier,
+  stepStamina,
+  stepVertical,
   Tile,
   VillageDef,
   ZoneMsg,
@@ -135,9 +142,19 @@ export class GameServer implements AiHost {
   }
 
   private tickPlayers(zone: Zone, now: number): void {
+    const dt = TICK_MS / 1000;
     for (const player of [...zone.players]) {
       const ent = player.entity;
-      if (ent.dead) continue;
+      if (ent.dead) {
+        ent.z = 0;
+        continue;
+      }
+
+      // Jump physics + sprint stamina (shared with client prediction).
+      stepVertical(player.vert, player.classId, now, dt);
+      ent.z = player.vert.z;
+      const sprinting = player.sprintHeld && ent.anim === 'move';
+      player.stamina = stepStamina(player.stamina, sprinting, dt);
 
       if (zone.kind === 'overworld') {
         player.lastOverworld = { x: ent.x, y: ent.y };
@@ -222,6 +239,8 @@ export class GameServer implements AiHost {
           dead: ent.dead,
           floorsDone: player.dungeonRun?.floorsDone,
           slowUntil: ent.slowUntil && ent.slowUntil > now ? ent.slowUntil - now : undefined,
+          stam: Math.round(player.stamina),
+          maxStam: STAMINA_MAX,
         },
         ents,
         gone,
@@ -347,7 +366,13 @@ export class GameServer implements AiHost {
 
     switch (msg.t) {
       case 'input':
-        this.handleInput(player, msg.seq, msg.mx, msg.my, msg.f, msg.dt);
+        this.handleInput(player, msg.seq, msg.mx, msg.my, msg.f, msg.dt, msg.sprint === true);
+        break;
+      case 'jump':
+        if (!player.entity.dead) {
+          if (msg.phase === 'down') jumpPress(player.vert, player.classId, this.now());
+          else jumpRelease(player.vert, player.classId, this.now());
+        }
         break;
       case 'cast': {
         const zone = this.zoneById(player.zoneId);
@@ -475,9 +500,18 @@ export class GameServer implements AiHost {
     console.log(`[game] ${player.name} (${player.classId}) connected — ${this.sessions.size} online`);
   }
 
-  private handleInput(player: Player, seq: number, mx: number, my: number, facing: number, dtMs: number): void {
+  private handleInput(
+    player: Player,
+    seq: number,
+    mx: number,
+    my: number,
+    facing: number,
+    dtMs: number,
+    sprint: boolean
+  ): void {
     const ent = player.entity;
     player.lastInputSeq = seq;
+    player.sprintHeld = sprint;
     if (ent.dead) return;
 
     // Sanitize: clamp dt and direction magnitude (basic speed-hack defense).
@@ -497,7 +531,8 @@ export class GameServer implements AiHost {
       if (!stunned) {
         const zone = this.zoneById(player.zoneId);
         if (zone) {
-          const speed = player.stats.moveSpeed * slowed;
+          const gamefeel = speedMultiplier(sprint, player.stamina, isCharging(player.vert));
+          const speed = player.stats.moveSpeed * slowed * gamefeel;
           zone.moveEntity(ent, mx * speed * dt, my * speed * dt);
           ent.anim = 'move';
         }

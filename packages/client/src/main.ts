@@ -3,7 +3,15 @@ import {
   CLASSES,
   ClassId,
   PROTOCOL_VERSION,
+  STAMINA_MAX,
   ServerMessage,
+  isCharging,
+  jumpPress,
+  jumpRelease,
+  newVerticalState,
+  speedMultiplier,
+  stepStamina,
+  stepVertical,
 } from '@webmagic/shared';
 import { Connection } from './net';
 import { Input } from './input';
@@ -77,8 +85,19 @@ function startGame(
   const hud = new Hud(overlay, classId);
   const inventory = new InventoryPanel(overlay);
 
+  // ---- local movement gamefeel: predict own jump + stamina for instant feel;
+  // the server runs the identical shared physics to replicate height to others.
+  const vert = newVerticalState();
+  let localStam = STAMINA_MAX;
+
   // ---- input wiring
   input.isTyping = () => chat.isOpen;
+  input.onJump = (phase) => {
+    const now = performance.now();
+    if (phase === 'down') jumpPress(vert, classId, now);
+    else jumpRelease(vert, classId, now);
+    conn.send({ t: 'jump', phase });
+  };
   input.onOpenChat = (initial) => chat.open(initial ?? '');
   input.onToggleInventory = () => inventory.toggle();
   input.onInteract = () => {
@@ -233,9 +252,16 @@ function startGame(
 
     const { mx, my } = input.moveIntent(dt);
     const moving = mx !== 0 || my !== 0;
-    const chunk = state.move(mx, my, dt);
+
+    // Local jump + stamina prediction (mirrors the server exactly).
+    stepVertical(vert, classId, now, dt);
+    const sprinting = input.sprinting && moving && localStam > 0 && !isCharging(vert);
+    localStam = stepStamina(localStam, sprinting, dt);
+    const spdMul = speedMultiplier(sprinting, localStam, isCharging(vert));
+
+    const chunk = state.move(mx, my, dt, spdMul);
     if (chunk) {
-      conn.send({ t: 'input', seq: chunk.seq, mx: chunk.mx, my: chunk.my, f: input.facing(), dt: chunk.dt });
+      conn.send({ t: 'input', seq: chunk.seq, mx: chunk.mx, my: chunk.my, f: input.facing(), dt: chunk.dt, sprint: chunk.sprint });
     }
 
     // interact prompt
@@ -251,8 +277,8 @@ function startGame(
       hud.setPrompt(null);
     }
 
-    hud.update(state, now);
-    renderer.render(state, input, now, dt, moving);
+    hud.update(state, now, localStam);
+    renderer.render(state, input, now, dt, moving, vert.z);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);

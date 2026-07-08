@@ -1,6 +1,7 @@
 export * from './math';
 export * from './tiles';
 export * from './collision';
+export * from './movement';
 export * from './constants';
 export * from './protocol';
 export * from './content/stats';

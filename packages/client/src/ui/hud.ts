@@ -17,6 +17,7 @@ export class Hud {
   private mpFill: HTMLElement;
   private mpLabel: HTMLElement;
   private xpFill: HTMLElement;
+  private stamFill: HTMLElement;
   private levelBadge: HTMLElement;
   private skillEls: { root: HTMLElement; cd: HTMLElement; id: SkillId }[] = [];
   private zoneName: HTMLElement;
@@ -42,6 +43,7 @@ export class Hud {
         <div class="level-badge"></div>
         <div class="skills"></div>
         <div class="xpbar"><div class="fill"></div></div>
+        <div class="stambar"><div class="fill"></div></div>
       </div>
       <div class="orb mp"><div class="fill"></div><div class="label"></div></div>
     `;
@@ -51,6 +53,7 @@ export class Hud {
     this.mpFill = bottom.querySelector('.mp .fill')!;
     this.mpLabel = bottom.querySelector('.mp .label')!;
     this.xpFill = bottom.querySelector('.xpbar .fill')!;
+    this.stamFill = bottom.querySelector('.stambar .fill')!;
     this.levelBadge = bottom.querySelector('.level-badge')!;
 
     const skillsEl = bottom.querySelector('.skills')!;
@@ -105,7 +108,7 @@ export class Hud {
 
     const hints = document.createElement('div');
     hints.className = 'hint-bar';
-    hints.textContent = 'WASD move · mouse turn · click/1-2 skills · E interact · I inventory · Enter chat';
+    hints.textContent = 'WASD move · Shift sprint · Space jump · mouse look · click/1-2 skills · E interact · I inventory · Enter chat';
     overlay.appendChild(hints);
   }
 
@@ -130,7 +133,7 @@ export class Hud {
     this.bigNoticeTimer = window.setTimeout(() => (this.bigNotice.style.opacity = '0'), 2600);
   }
 
-  update(state: WorldState, now: number): void {
+  update(state: WorldState, now: number, stamina?: number): void {
     const s = state.self;
     if (!s) return;
     this.hpFill.style.height = `${Math.max(0, (s.hp / s.maxHp) * 100)}%`;
@@ -139,6 +142,12 @@ export class Hud {
     this.mpLabel.textContent = `${s.mp}/${s.maxMp}`;
     this.xpFill.style.width = `${Math.min(100, (s.xp / s.xpNext) * 100)}%`;
     this.levelBadge.textContent = `Level ${s.level}`;
+
+    // Sprint stamina — client-predicted value (falls back to the server's).
+    const stam = stamina ?? s.stam;
+    const stamPct = Math.max(0, Math.min(100, (stam / s.maxStam) * 100));
+    this.stamFill.style.width = `${stamPct}%`;
+    this.stamFill.classList.toggle('low', stamPct < 25);
 
     for (const sk of this.skillEls) {
       const locked = SKILLS[sk.id].unlockLevel > s.level;

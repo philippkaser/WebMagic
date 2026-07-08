@@ -50,7 +50,7 @@ export class EntitySprites {
         yBase += Math.abs(Math.sin(now * 0.012 + id)) * 0.09; // walk bob
       }
 
-      inst.mesh.position.set(p.x, dead ? 0.25 : yBase, p.y);
+      inst.mesh.position.set(p.x, dead ? 0.25 : yBase + p.z, p.y);
       // billboard toward camera (yaw only)
       inst.mesh.rotation.y = Math.atan2(camX - p.x, camZ - p.y);
       if (dead) {

@@ -77,6 +77,9 @@ canvas.game {
 .center-hud { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .xpbar { width: 320px; height: 10px; background: #0a0810; border: 2px solid var(--ui-border); }
 .xpbar .fill { height: 100%; background: var(--xp); transition: width .3s; }
+.stambar { width: 320px; height: 5px; margin-top: 3px; background: #0a0810; border: 1px solid var(--ui-border); }
+.stambar .fill { height: 100%; background: #4fd0c0; transition: width .08s linear; }
+.stambar .fill.low { background: #e0a23a; }
 .skills { display: flex; gap: 6px; }
 .skill {
   width: 52px; height: 52px; border: 2px solid var(--ui-border); background: var(--ui-bg);

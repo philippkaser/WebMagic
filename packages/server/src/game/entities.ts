@@ -86,6 +86,8 @@ export interface Entity {
   level?: number;
   light?: number;
   dead: boolean;
+  /** Height above ground (jumping players). Presentational — not in 2D collision. */
+  z?: number;
 
   // combat
   attackCooldownUntil?: number;
@@ -137,5 +139,6 @@ export function snapshotEntity(e: Entity): EntitySnapshot {
   if (e.name) snap.n = e.name;
   if (e.level) snap.lvl = e.level;
   if (e.light) snap.lt = e.light;
+  if (e.z && e.z > 0.01) snap.z = Math.round(e.z * 100) / 100;
   return snap;
 }
