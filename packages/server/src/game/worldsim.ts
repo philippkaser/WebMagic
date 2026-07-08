@@ -27,11 +27,31 @@ export interface WorldSimHost {
 }
 
 const VILLAGER_NAMES = ['Ada', 'Bram', 'Cora', 'Dane', 'Eda', 'Finn', 'Gerd', 'Hale', 'Ivo', 'Jyn'];
-const CARAVAN_INTERVAL_MS = 75_000;
+const CARAVAN_INTERVAL_MS = 38_000;
 const MONSTER_RESPAWN_MS = 35_000;
 const CORPSE_LINGER_MS = 4_000;
 const RAID_CHECK_MS = 100_000;
 const RAID_DURATION_MS = 150_000;
+// The event director keeps something happening every ~11–19s.
+const EVENT_INTERVAL_MS = 11_000;
+
+const TRAVELER_TITLES = ['a wandering peddler', 'a hooded pilgrim', 'a road-weary bard', 'a lost traveler', 'a tax collector'];
+const WILD_FLAVOR = [
+  'A cold wind sweeps down from the mountains.',
+  'Somewhere far off, a wolf howls.',
+  'Crows wheel over the treeline.',
+  'The lanterns gutter in a sudden breeze.',
+  'Distant thunder rolls beyond the hills.',
+  'Birdsong drifts across the fields.',
+  'The scent of rain hangs in the air.',
+  'Leaves skitter across the road.',
+];
+const OMENS = [
+  '✦ A star falls, streaking green across the sky.',
+  '✦ The air hums — somewhere in the deep, a portal flares.',
+  '✦ The moon reddens for a moment. An ill omen.',
+  '✦ A distant horn sounds three times, then falls silent.',
+];
 
 interface PendingRespawn {
   at: number;
@@ -67,6 +87,7 @@ export class WorldSim {
   private readonly dayLengthMs: number;
   private nextCaravanAt = 0;
   private nextRaidAt = 0;
+  private nextEventAt = 0;
   private raids: ActiveRaid[] = [];
   private respawns: PendingRespawn[] = [];
   private corpses: { e: Entity; at: number }[] = [];
@@ -240,6 +261,57 @@ export class WorldSim {
     }
 
     this.tickRaids(host, now);
+    this.runEvents(host, now);
+  }
+
+  /**
+   * The event director: keeps something happening every ~15–25s — travelers on
+   * the roads, monster packs prowling the wilds, ambient flavor and rare omens —
+   * so the overworld never feels dead.
+   */
+  private runEvents(host: WorldSimHost, now: number): void {
+    if (now < this.nextEventAt) return;
+    this.nextEventAt = now + EVENT_INTERVAL_MS + this.rng.range(0, 8_000);
+    const roll = this.rng.next();
+    if (roll < 0.42) {
+      host.systemNotice(this.rng.pick(WILD_FLAVOR));
+    } else if (roll < 0.7) {
+      this.spawnTraveler(host, now);
+    } else if (roll < 0.92) {
+      this.spawnWildPack(host, now);
+    } else {
+      host.systemNotice(this.rng.pick(OMENS));
+    }
+  }
+
+  /** A lone traveler walks a road between two villages, then fades from the world. */
+  private spawnTraveler(host: WorldSimHost, now: number): void {
+    if (this.world.roads.length === 0) return;
+    const road = this.rng.pick(this.world.roads);
+    const forward = this.rng.chance(0.5);
+    const path = forward ? [...road.points] : [...road.points].reverse();
+    const to = this.world.villages.find((v) => v.id === (forward ? road.b : road.a));
+    const start = path[0];
+    const title = this.rng.pick(TRAVELER_TITLES);
+    const t = spawnNpc(this.zone, 'villager', start.x, start.y, { name: title, path });
+    if (t.ai) t.ai.mode = 'travel'; // follow the road like a caravan
+    t.despawnAt = now + 150_000; // self-clean if it never reaches town
+    host.systemNotice(`You spot ${title} on the road${to ? ` to ${to.name}` : ''}.`);
+  }
+
+  /** A roaming monster pack prowls the wilds for a while, then wanders off. */
+  private spawnWildPack(host: WorldSimHost, now: number): void {
+    const kinds = ['goblin', 'wolf', 'orc'] as const;
+    const kind = this.rng.pick(kinds);
+    const c = tileCenter(this.rng.int(20, this.world.map.w - 20), this.rng.int(20, this.world.map.h - 20));
+    const spot = this.openSpot(c.x, c.y, 8);
+    const n = this.rng.int(2, 4);
+    for (let i = 0; i < n; i++) {
+      const m = spawnMonster(this.zone, MONSTERS[kind], spot.x + this.rng.range(-3, 3), spot.y + this.rng.range(-3, 3));
+      if (m.ai) m.ai.wanderRadius = 12;
+      m.despawnAt = now + 150_000; // the pack moves on if left alone
+    }
+    host.systemNotice(`A pack of ${MONSTERS[kind].name}s has been sighted prowling the wilds.`);
   }
 
   /**
