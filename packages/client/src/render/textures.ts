@@ -1276,6 +1276,39 @@ const RARITY_GLOW: Record<string, string> = {
   legendary: '#ff8833',
 };
 
+/**
+ * Add a chunky dark outline around a sprite's silhouette — the classic
+ * pixel-art technique that makes characters pop against any background.
+ * `thickness` is in device pixels (one grid cell = the painter's scale).
+ */
+function addOutline(canvas: HTMLCanvasElement, thickness = 4, color = '#141020'): void {
+  const ctx = canvas.getContext('2d')!;
+  const W = canvas.width;
+  const H = canvas.height;
+  const src = ctx.getImageData(0, 0, W, H);
+  const a = src.data;
+  const out = new Uint8ClampedArray(a);
+  const [cr, cg, cb] = rgbOf(color);
+  const opaque = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && a[(y * W + x) * 4 + 3] > 16;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const o = (y * W + x) * 4;
+      if (a[o + 3] > 16) continue; // keep existing opaque pixels
+      let edge = false;
+      for (let d = 1; d <= thickness && !edge; d++) {
+        if (opaque(x - d, y) || opaque(x + d, y) || opaque(x, y - d) || opaque(x, y + d)) edge = true;
+      }
+      if (edge) {
+        out[o] = cr;
+        out[o + 1] = cg;
+        out[o + 2] = cb;
+        out[o + 3] = 255;
+      }
+    }
+  }
+  ctx.putImageData(new ImageData(out, W, H), 0, 0);
+}
+
 export function spriteDef(variant: string): SpriteDef {
   let def = spriteCache.get(variant);
   if (def) return def;
@@ -1290,16 +1323,19 @@ export function spriteDef(variant: string): SpriteDef {
   let h = 2.1;
   let emissive = false;
   let views: SpriteDef['views'];
+  let outline = false;
 
   if (base in LOOK) {
     // Directional: front/back/side billboards picked by facing vs. camera.
     const look = varyLook(LOOK[base], variantIndex);
-    canvas = drawHumanoid(look, 'front');
-    views = {
-      front: toTexture(canvas, false),
-      back: toTexture(drawHumanoid(look, 'back'), false),
-      side: toTexture(drawHumanoid(look, 'side'), false),
+    const view = (o: Orient) => {
+      const cv = drawHumanoid(look, o);
+      addOutline(cv); // dark pixel-art outline so the figure reads
+      return toTexture(cv, false);
     };
+    canvas = drawHumanoid(look, 'front');
+    addOutline(canvas);
+    views = { front: toTexture(canvas, false), back: view('back'), side: view('side') };
     if (base === 'ogre') { w = 2.2; h = 3.3; }
     if (base === 'goblin' || base === 'imp') { w = 1.1; h = 1.65; }
   } else if (base in RARITY_GLOW) {
@@ -1404,8 +1440,12 @@ export function spriteDef(variant: string): SpriteDef {
         w = 0.6; h = 0.6; emissive = true;
         break;
     }
+    // Outline every solid sprite (creatures, props, trees) — but not the
+    // glowing emissive ones (portals, bolts, torches, loot orbs).
+    outline = !emissive;
   }
 
+  if (outline) addOutline(canvas);
   const texture = views ? views.front : toTexture(canvas, false);
   def = { texture, w, h, emissive, views };
   spriteCache.set(variant, def);
