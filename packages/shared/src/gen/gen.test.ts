@@ -93,6 +93,28 @@ test('dungeon spawn, stairs and exit portal are placed and reachable from spawn'
   }
 });
 
+test('dungeon floors place spike traps on walkable floor, sparing the entry', () => {
+  for (let floor = 1; floor <= 5; floor++) {
+    const d = generateDungeonFloor(2222, floor);
+    let spikes = 0;
+    for (const t of d.map.tiles) if (t === Tile.Spikes) spikes++;
+    assert.ok(spikes > 0, `floor ${floor} should have spike traps`);
+    // Spikes are walkable (jumpable), so they never block the route to the stairs.
+    const spawnTx = worldToTile(d.spawn.x);
+    const spawnTy = worldToTile(d.spawn.y);
+    assert.notEqual(d.map.get(spawnTx, spawnTy), Tile.Spikes, 'never trap the spawn tile');
+  }
+});
+
+test('the new dungeon monsters (slime, spider) appear across floors', () => {
+  const seen = new Set<string>();
+  for (let floor = 1; floor <= 6; floor++) {
+    for (const s of generateDungeonFloor(31, floor).monsterSpawns) seen.add(s.monster);
+  }
+  assert.ok(seen.has('slime'), 'slimes should spawn');
+  assert.ok(seen.has('spider'), 'spiders should spawn');
+});
+
 test('deeper dungeon floors grow and field more monsters', () => {
   const shallow = generateDungeonFloor(11, 1);
   const deep = generateDungeonFloor(11, 6);

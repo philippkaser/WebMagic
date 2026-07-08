@@ -13,12 +13,13 @@ const WALL_TEX_SCALE = 1.8;
  */
 export class LevelMesh {
   readonly group = new THREE.Group();
-  private disposables: (THREE.BufferGeometry | THREE.Material)[] = [];
+  private disposables: (THREE.BufferGeometry | THREE.Material | THREE.InstancedMesh)[] = [];
 
   build(map: TileMap, kind: 'overworld' | 'dungeon'): void {
     const floorBuckets = new Map<string, number[]>(); // texture -> positions of tile quads
     const wallBuckets = new Map<string, { pos: number[]; uv: number[]; nrm: number[] }>();
     const treePositions: { x: number; y: number }[] = [];
+    const spikePositions: { x: number; y: number }[] = [];
 
     const floorTexOf = (t: Tile): string | null => {
       switch (t) {
@@ -29,6 +30,7 @@ export class LevelMesh {
         case Tile.Door: return kind === 'dungeon' ? 'dungeon-floor' : 'wood-floor';
         case Tile.StairsDown: return 'stairs';
         case Tile.PortalPad: return 'portal-pad';
+        case Tile.Spikes: return 'spikes';
         case Tile.Tree: return 'grass';
         default: return null;
       }
@@ -40,6 +42,7 @@ export class LevelMesh {
       for (let tx = 0; tx < map.w; tx++) {
         const t = map.get(tx, ty);
         if (t === Tile.Tree) treePositions.push({ x: (tx + 0.5) * TILE_SIZE, y: (ty + 0.5) * TILE_SIZE });
+        if (t === Tile.Spikes) spikePositions.push({ x: (tx + 0.5) * TILE_SIZE, y: (ty + 0.5) * TILE_SIZE });
 
         const floorTex = floorTexOf(t);
         if (floorTex) {
@@ -161,6 +164,28 @@ export class LevelMesh {
       mesh.frustumCulled = false;
       this.group.add(mesh);
       this.disposables.push(geo, mat);
+    }
+
+    // --- spike traps: a cluster of sharp metal cones per trap tile.
+    if (spikePositions.length > 0) {
+      const cone = new THREE.ConeGeometry(0.13, 0.55, 4);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.45, metalness: 0.6, flatShading: true });
+      const offsets = [
+        [-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5], [0, 0],
+      ];
+      const mesh = new THREE.InstancedMesh(cone, mat, spikePositions.length * offsets.length);
+      const m = new THREE.Matrix4();
+      let i = 0;
+      for (const p of spikePositions) {
+        for (const [ox, oz] of offsets) {
+          m.makeTranslation(p.x + ox, 0.27, p.y + oz);
+          mesh.setMatrixAt(i++, m);
+        }
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.frustumCulled = false;
+      this.group.add(mesh);
+      this.disposables.push(cone, mat, mesh);
     }
   }
 

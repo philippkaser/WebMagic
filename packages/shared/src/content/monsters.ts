@@ -1,4 +1,13 @@
-export type MonsterId = 'goblin' | 'wolf' | 'orc' | 'skeleton' | 'imp' | 'ogre';
+export type MonsterId =
+  | 'goblin'
+  | 'wolf'
+  | 'orc'
+  | 'skeleton'
+  | 'imp'
+  | 'ogre'
+  | 'slime'
+  | 'slimelet'
+  | 'spider';
 
 export interface MonsterDef {
   id: MonsterId;
@@ -20,6 +29,8 @@ export interface MonsterDef {
   habitat: 'overworld' | 'dungeon';
   /** Nocturnal hunters doze through the day and roam wide at night. */
   nocturnal?: boolean;
+  /** On death, spawn smaller monsters (slimes splitting). */
+  splitInto?: { id: MonsterId; count: number };
 }
 
 export const MONSTERS: Record<MonsterId, MonsterDef> = {
@@ -113,6 +124,53 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     attackCooldownMs: 2000,
     xp: 110,
     lootChance: 0.9,
+    habitat: 'dungeon',
+  },
+  slime: {
+    id: 'slime',
+    name: 'Gelatinous Slime',
+    level: 2,
+    hp: 70,
+    damage: 9,
+    speed: 2.8,
+    radius: 0.5,
+    aggroRange: 8,
+    attackRange: 1.6,
+    attackCooldownMs: 1500,
+    xp: 22,
+    lootChance: 0.2,
+    habitat: 'dungeon',
+    // Cleaving one open just makes two smaller ones.
+    splitInto: { id: 'slimelet', count: 2 },
+  },
+  slimelet: {
+    id: 'slimelet',
+    name: 'Slimelet',
+    level: 1,
+    hp: 22,
+    damage: 5,
+    speed: 3.6,
+    radius: 0.3,
+    aggroRange: 9,
+    attackRange: 1.3,
+    attackCooldownMs: 1200,
+    xp: 8,
+    lootChance: 0.05,
+    habitat: 'dungeon',
+  },
+  spider: {
+    id: 'spider',
+    name: 'Cave Spider',
+    level: 3,
+    hp: 34,
+    damage: 8,
+    speed: 6.8,
+    radius: 0.38,
+    aggroRange: 13,
+    attackRange: 1.4,
+    attackCooldownMs: 900,
+    xp: 20,
+    lootChance: 0.18,
     habitat: 'dungeon',
   },
 };

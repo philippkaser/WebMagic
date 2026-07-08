@@ -64,6 +64,8 @@ export class Player {
   vert: VerticalState = newVerticalState();
   stamina = STAMINA_MAX;
   sprintHeld = false;
+  /** Next time a spike trap may hurt this player again. */
+  spikeCdUntil = 0;
   zoneId = 'overworld';
   dungeonRun: DungeonRunState | null = null;
   respawnAt = 0;

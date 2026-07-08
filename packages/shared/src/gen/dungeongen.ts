@@ -110,7 +110,10 @@ export function generateDungeonFloor(dungeonSeed: number, floor: number): Dungeo
 
   // --- monsters: skip the entry room; the stairs room gets a guardian pack
   const monsterSpawns: MonsterSpawnDef[] = [];
-  const pool: MonsterId[] = floor < 2 ? ['skeleton', 'skeleton', 'imp'] : ['skeleton', 'imp', 'imp', 'ogre'];
+  const pool: MonsterId[] =
+    floor < 2
+      ? ['skeleton', 'slime', 'spider', 'skeleton']
+      : ['skeleton', 'slime', 'spider', 'imp', 'imp', 'ogre'];
   for (const r of rooms) {
     if (r === entryRoom) continue;
     const isStairsRoom = r === stairsRoom;
@@ -133,6 +136,21 @@ export function generateDungeonFloor(dungeonSeed: number, floor: number): Dungeo
       const ty = rng.int(r.y + 1, r.y + r.h - 2);
       lootSpawns.push(tileCenter(tx, ty));
     }
+  }
+
+  // --- spike traps: scattered on open floor away from the entry room, so
+  // corridors and rooms hold hazards you can jump over to cross safely.
+  const trapCount = 4 + Math.min(8, floor * 2);
+  let traps = 0;
+  let trapTries = 0;
+  while (traps < trapCount && trapTries < 500) {
+    trapTries++;
+    const tx = rng.int(2, size - 3);
+    const ty = rng.int(2, size - 3);
+    if (map.get(tx, ty) !== Tile.Floor) continue;
+    if (Math.abs(tx - entry.x) < 4 && Math.abs(ty - entry.y) < 4) continue; // spare the entry
+    map.set(tx, ty, Tile.Spikes);
+    traps++;
   }
 
   return {

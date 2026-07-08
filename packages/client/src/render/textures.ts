@@ -717,6 +717,10 @@ export function tileTexture(name: string): THREE.Texture {
     case 'stairs':
       canvas = noisyTile('#2a2530', ['#38334200', '#111'], 122, { color: '#0d0b12', size: 8 });
       break;
+    case 'spikes':
+      // dark pitted metal plate the spikes sit on
+      canvas = noisyTile('#1a1518', ['#2a2226', '#0d0a0c', '#332a2e'], 133, { color: '#0a0709', size: 16 });
+      break;
     default:
       canvas = noisyTile('#ff00ff', ['#dd00dd'], 1);
   }
@@ -815,6 +819,39 @@ function drawWolf(): HTMLCanvasElement {
   px(8, 10, 2, 4, dark);
   px(13, 10, 2, 4, dark);
   px(15, 4, 4, 2, dark); // tail
+  return c;
+}
+
+function drawSlime(body: string, dark: string, light: string): HTMLCanvasElement {
+  const [c, px] = pixelPainter(16, 14);
+  // gooey dome
+  px(3, 8, 10, 5, body);
+  px(2, 9, 12, 3, body);
+  px(4, 5, 8, 4, body);
+  px(5, 3, 6, 3, body);
+  px(4, 11, 10, 2, dark); // shadowed base
+  px(5, 4, 3, 2, light); // highlight
+  px(6, 7, 1, 1, '#1a1a1a'); // eyes
+  px(9, 7, 1, 1, '#1a1a1a');
+  px(6, 9, 4, 1, dark); // mouth
+  return c;
+}
+
+function drawSpider(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(18, 12);
+  const body = '#2a2230';
+  const dark = '#181320';
+  // legs
+  for (const lx of [1, 2, 14, 15]) px(lx, 5, 3, 1, dark);
+  px(2, 3, 2, 2, dark);
+  px(14, 3, 2, 2, dark);
+  px(2, 8, 2, 2, dark);
+  px(14, 8, 2, 2, dark);
+  // body
+  px(6, 4, 6, 5, body);
+  px(7, 3, 4, 2, body);
+  px(7, 5, 1, 1, '#e0403a'); // eyes
+  px(10, 5, 1, 1, '#e0403a');
   return c;
 }
 
@@ -934,6 +971,21 @@ export function spriteDef(variant: string): SpriteDef {
         canvas = drawWolf();
         w = 1.8;
         h = 1.26;
+        break;
+      case 'slime':
+        canvas = drawSlime('#5bb84a', '#2f7a2c', '#9fe08a');
+        w = 1.5;
+        h = 1.3;
+        break;
+      case 'slimelet':
+        canvas = drawSlime('#6cc85a', '#3a8a34', '#b0f098');
+        w = 0.85;
+        h = 0.75;
+        break;
+      case 'spider':
+        canvas = drawSpider();
+        w = 1.5;
+        h = 1.0;
         break;
       case 'caravan':
         canvas = drawCaravan();

@@ -95,7 +95,10 @@ to disable the `/goto` and `/xp` dev commands.
   dungeons with infinite floors of scaling difficulty. Everyone entering the same
   portal joins the same instance, forming ad-hoc groups. Loot found inside is
   *unclaimed* until you complete 2 floors and leave through an exit portal; die down
-  there and you wake up at the inn having lost everything you found.
+  there and you wake up at the inn having lost everything you found. Floors are
+  stalked by skeletons, imps, ogres, fast **cave spiders**, and **gelatinous slimes
+  that split into two slimelets when you cut them down** — and studded with **spike
+  traps** that bite grounded heroes, so time a jump to cross them unharmed.
 - **Doom-style rendering** — low-res upscaled framebuffer, billboard pixel sprites lit
   by the scene, merged tile geometry, fog, and a pooled dynamic light system: torches
   flicker, firebolts light up corridors as they fly, explode on impact with a real

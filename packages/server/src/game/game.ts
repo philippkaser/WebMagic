@@ -9,6 +9,7 @@ import {
   FxMsg,
   INTERACT_RANGE,
   MAX_NAME_LENGTH,
+  MONSTERS,
   PICKUP_RADIUS,
   PROTOCOL_VERSION,
   PortalDef,
@@ -29,6 +30,7 @@ import {
   ZoneMsg,
   dist,
   generateItem,
+  scaledMonster,
   generateOverworld,
   worldToTile,
   xpForLevel,
@@ -42,7 +44,7 @@ import { WorldSim } from './worldsim';
 import { DungeonManager } from './dungeon';
 import { tickAi, AiHost } from './ai';
 import { castSkill } from './combat';
-import { dropLoot } from './spawn';
+import { dropLoot, spawnMonster } from './spawn';
 import type { PlayerStore } from '../persist/store';
 import { hashPassphrase, verifyPassphrase } from '../auth';
 
@@ -173,10 +175,16 @@ export class GameServer implements AiHost {
         }
       }
 
-      // Stairs: descend to the next dungeon floor.
-      if (zone.kind === 'dungeon' && player.dungeonRun) {
+      // Stairs + spike traps.
+      if (zone.kind === 'dungeon') {
         const tile = zone.map.get(worldToTile(ent.x), worldToTile(ent.y));
-        if (tile === Tile.StairsDown) this.descendStairs(player, now);
+        if (tile === Tile.StairsDown && player.dungeonRun) this.descendStairs(player, now);
+        // Spikes bite grounded players — jump over them to cross unharmed.
+        else if (tile === Tile.Spikes && player.vert.z < 0.45 && now >= player.spikeCdUntil) {
+          player.spikeCdUntil = now + 700;
+          const floor = player.dungeonRun?.floor ?? 0;
+          zone.applyDamage(this, ent, 9 + floor * 3, null, now);
+        }
       }
     }
   }
@@ -316,6 +324,20 @@ export class GameServer implements AiHost {
       if (Math.random() < def.lootChance) {
         const item = generateItem(this.lootRng, Math.max(1, def.level * 2));
         dropLoot(zone, victim.x, victim.y, item, now);
+      }
+      // Slimes split into smaller slimes that immediately turn on the killer.
+      if (def.splitInto && zone.kind === 'dungeon') {
+        const base = MONSTERS[def.splitInto.id];
+        const depth = Math.max(0, def.level - MONSTERS[def.id].level); // recover floor scaling
+        const childDef = scaledMonster(base, depth);
+        for (let i = 0; i < def.splitInto.count; i++) {
+          const ang = (i / def.splitInto.count) * Math.PI * 2 + Math.random();
+          const child = spawnMonster(zone, childDef, victim.x + Math.cos(ang) * 0.7, victim.y + Math.sin(ang) * 0.7);
+          if (creditId && child.ai) {
+            child.ai.mode = 'chase';
+            child.ai.targetId = creditId;
+          }
+        }
       }
       if (zone.kind === 'dungeon') {
         // dungeons do not respawn — clear the corpse after a moment

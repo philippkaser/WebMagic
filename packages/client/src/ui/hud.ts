@@ -210,6 +210,7 @@ export class Hud {
           case Tile.Door: color = '#6b532c'; break;
           case Tile.StairsDown: color = '#d8b45a'; break;
           case Tile.PortalPad: color = '#8a5dd8'; break;
+          case Tile.Spikes: color = '#7a2a2a'; break;
         }
         if (color) {
           ctx.fillStyle = color;

@@ -13,6 +13,7 @@ export enum Tile {
   Door = 8, // walkable doorway
   StairsDown = 9, // dungeon: descend to next floor
   PortalPad = 10, // decorative pad under portals
+  Spikes = 11, // dungeon trap: hurts grounded players (jump over to cross safely)
 }
 
 const BLOCKING = new Set<Tile>([Tile.Void, Tile.Tree, Tile.Water, Tile.Rock, Tile.Wall]);
