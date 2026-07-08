@@ -20,9 +20,20 @@ interface Candidate {
  * every frame to the nearest/strongest light sources — static torches, the
  * player's lantern, glowing projectiles, portals and rare loot.
  */
+interface LightFlash {
+  x: number;
+  y: number;
+  color: number;
+  intensity: number;
+  range: number;
+  until: number; // seconds, in the update() time base
+  duration: number;
+}
+
 export class LightPool {
   private lights: THREE.PointLight[] = [];
   private torches: Vec2[] = [];
+  private flashes: LightFlash[] = [];
 
   constructor(scene: THREE.Scene) {
     for (let i = 0; i < MAX_LIGHTS; i++) {
@@ -34,6 +45,18 @@ export class LightPool {
 
   setTorches(torches: Vec2[]): void {
     this.torches = torches;
+  }
+
+  /** Transient burst of light (explosions, impacts). `now` in seconds. */
+  flash(x: number, y: number, color: number, now: number, opts: { intensity?: number; range?: number; durationMs?: number } = {}): void {
+    const duration = (opts.durationMs ?? 380) / 1000;
+    this.flashes.push({
+      x, y, color,
+      intensity: opts.intensity ?? 26,
+      range: opts.range ?? 11,
+      until: now + duration,
+      duration,
+    });
   }
 
   /**
@@ -64,6 +87,20 @@ export class LightPool {
       });
     }
     candidates.push(...dynamics);
+
+    // explosion flashes: bright, then rapid falloff
+    this.flashes = this.flashes.filter((f) => f.until > time);
+    for (const f of this.flashes) {
+      const life = (f.until - time) / f.duration; // 1 → 0
+      candidates.push({
+        x: f.x, y: f.y, height: 1.2,
+        color: f.color,
+        intensity: f.intensity * life * life,
+        range: f.range,
+        flicker: 0,
+        seed: 0,
+      });
+    }
     if (lantern.on) {
       candidates.push({
         x: lantern.x, y: lantern.y, height: 1.8,

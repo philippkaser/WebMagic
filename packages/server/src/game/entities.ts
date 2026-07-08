@@ -71,6 +71,8 @@ export interface Entity {
   damage?: number;
   ownerId?: number;
   slowMs?: number;
+  /** Explode on impact, hitting everything hostile within this radius. */
+  explodeRadius?: number;
 
   // loot
   item?: Item;

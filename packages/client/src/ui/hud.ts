@@ -21,6 +21,7 @@ export class Hud {
   private skillEls: { root: HTMLElement; cd: HTMLElement; id: SkillId }[] = [];
   private zoneName: HTMLElement;
   private zoneSub: HTMLElement;
+  private zoneTime!: HTMLElement;
   private prompt: HTMLElement;
   private deathScreen: HTMLElement;
   private bigNotice: HTMLElement;
@@ -65,10 +66,11 @@ export class Hud {
 
     const top = document.createElement('div');
     top.className = 'hud-top';
-    top.innerHTML = `<div class="zone-name"></div><div class="zone-sub"></div>`;
+    top.innerHTML = `<div class="zone-name"></div><div class="zone-sub"></div><div class="zone-time"></div>`;
     overlay.appendChild(top);
     this.zoneName = top.querySelector('.zone-name')!;
     this.zoneSub = top.querySelector('.zone-sub')!;
+    this.zoneTime = top.querySelector('.zone-time')!;
 
     this.prompt = document.createElement('div');
     this.prompt.className = 'interact-prompt';
@@ -154,6 +156,17 @@ export class Hud {
     }
 
     this.deathScreen.classList.toggle('open', s.dead);
+
+    // world clock (overworld only — dungeons are timeless dark)
+    if (state.zone?.kind === 'overworld') {
+      const t = state.worldTime;
+      const hours = Math.floor(t * 24);
+      const mins = Math.floor((t * 24 - hours) * 60);
+      const icon = t > 0.28 && t < 0.72 ? '☀️' : t < 0.22 || t > 0.8 ? '🌙' : t <= 0.28 ? '🌅' : '🌆';
+      this.zoneTime.textContent = `${icon} ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    } else {
+      this.zoneTime.textContent = '';
+    }
 
     if (now - this.lastMinimapDraw > 180) {
       this.lastMinimapDraw = now;

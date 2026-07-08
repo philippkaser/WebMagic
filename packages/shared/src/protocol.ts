@@ -195,7 +195,7 @@ export interface ChatBroadcastMsg {
 /** Transient effects: floating damage numbers, level-ups, deaths, pickups… */
 export interface FxMsg {
   t: 'fx';
-  kind: 'hit' | 'crit' | 'heal' | 'death' | 'levelup' | 'pickup' | 'nova';
+  kind: 'hit' | 'crit' | 'heal' | 'death' | 'levelup' | 'pickup' | 'nova' | 'explosion';
   x: number;
   y: number;
   entId?: number;

@@ -93,6 +93,7 @@ function tryAttack(host: AiHost, zone: Zone, e: Entity, target: Entity, def: Mon
       range: def.attackRange + 6,
       light: def.projectile.lightColor,
       variant: 'monster-bolt',
+      explodeRadius: def.projectile.aoeRadius,
     });
   } else {
     zone.applyDamage(host, target, def.damage, e, now);

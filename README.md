@@ -68,7 +68,14 @@ to disable the `/goto` and `/xp` dev commands.
   there and you wake up at the inn having lost everything you found.
 - **Doom-style rendering** — low-res upscaled framebuffer, billboard pixel sprites lit
   by the scene, merged tile geometry, fog, and a pooled dynamic light system: torches
-  flicker, firebolts light up corridors as they fly, portals glow, rare loot shines.
+  flicker, firebolts light up corridors as they fly, explode on impact with a real
+  flash of light and splash damage, portals glow, rare loot shines. Walls use
+  procedurally generated PBR stone materials (color + normal + roughness maps), and
+  the overworld runs a full day/night cycle with a travelling sun, moonlight, a
+  starfield and an in-game clock.
+- **Resilience** — the public HTTP surface survives malformed requests, the tick loop
+  and process are guarded against stray exceptions, and the client reconnects and
+  logs back in automatically if the connection drops.
 - **Chat** — global and local (earshot) channels plus world event announcements.
 - **Persistence** — characters (level, XP, inventory, equipment, position) survive
   server restarts.

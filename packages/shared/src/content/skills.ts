@@ -25,6 +25,8 @@ export interface SkillDef {
   scale: 'melee' | 'spell';
   /** Projectile travel speed, m/s. */
   speed?: number;
+  /** Projectiles with this set explode on impact, damaging everything nearby. */
+  aoeRadius?: number;
   /** Emitted light color (hex) for projectiles / effects — feeds reactive lighting. */
   lightColor?: number;
   unlockLevel: number;
@@ -70,6 +72,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     power: 16,
     scale: 'spell',
     speed: 18,
+    aoeRadius: 2.2,
     lightColor: 0xff7722,
     unlockLevel: 1,
   },

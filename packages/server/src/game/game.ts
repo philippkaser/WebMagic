@@ -74,7 +74,14 @@ export class GameServer implements AiHost {
     this.worldSim = new WorldSim(this.overworld, world, CONFIG.worldSeed);
     this.worldSim.populate(this.now());
 
-    this.timer = setInterval(() => this.tick(), TICK_MS);
+    // A logic error in one tick must never take the server down.
+    this.timer = setInterval(() => {
+      try {
+        this.tick();
+      } catch (err) {
+        console.error('[game] tick error (survived):', err);
+      }
+    }, TICK_MS);
     setInterval(() => void this.store.flush(), CONFIG.saveIntervalMs);
     console.log(
       `[game] world ${world.map.w}x${world.map.h} ready — ` +

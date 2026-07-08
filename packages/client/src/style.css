@@ -101,6 +101,7 @@ canvas.game {
 }
 .zone-name { color: var(--ui-gold); font-size: 15px; letter-spacing: 2px; }
 .zone-sub { color: #9a8f7a; font-size: 11px; }
+.zone-time { color: #b8ac92; font-size: 12px; margin-top: 3px; }
 
 .interact-prompt {
   position: absolute; bottom: 30%; left: 50%; transform: translateX(-50%);

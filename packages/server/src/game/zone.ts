@@ -78,13 +78,13 @@ export class Zone {
       if (e.kind !== 'projectile') continue;
       e.ttl! -= dt;
       if (e.ttl! <= 0) {
-        this.removeEntity(e);
+        this.detonate(host, e, null, now); // fizzle at max range still pops
         continue;
       }
       const nx = e.x + e.vx! * dt;
       const ny = e.y + e.vy! * dt;
       if (this.map.blockedAtWorld(nx, ny)) {
-        this.removeEntity(e);
+        this.detonate(host, e, null, now); // wall impact
         continue;
       }
       e.x = nx;
@@ -101,12 +101,44 @@ export class Zone {
         const dy = target.y - e.y;
         const r = target.radius + e.radius;
         if (dx * dx + dy * dy > r * r) continue;
-        const owner = this.entities.get(e.ownerId ?? -1) ?? null;
-        this.applyDamage(host, target, e.damage ?? 1, owner, now);
-        if (e.slowMs && !target.dead) target.slowUntil = now + e.slowMs;
-        this.removeEntity(e);
+        this.detonate(host, e, target, now);
         break;
       }
+    }
+  }
+
+  /**
+   * End of a projectile's flight. Plain bolts damage only what they struck;
+   * explosive ones (fireballs) blast everything hostile around the impact.
+   */
+  private detonate(host: ZoneHost, e: Entity, directTarget: Entity | null, now: number): void {
+    this.removeEntity(e);
+    const owner = this.entities.get(e.ownerId ?? -1) ?? null;
+    const damage = e.damage ?? 1;
+
+    if (!e.explodeRadius) {
+      if (directTarget) {
+        this.applyDamage(host, directTarget, damage, owner, now);
+        if (e.slowMs && !directTarget.dead) directTarget.slowUntil = now + e.slowMs;
+      }
+      return;
+    }
+
+    host.broadcastFx(this, {
+      t: 'fx',
+      kind: 'explosion',
+      x: e.x,
+      y: e.y,
+      color: e.light ?? 0xff7722,
+      amount: e.explodeRadius,
+    });
+    for (const target of this.grid.query(e.x, e.y, e.explodeRadius)) {
+      if (target.dead || target.faction === e.faction || target.faction === 'none') continue;
+      if (target.kind !== 'player' && target.kind !== 'monster' && target.kind !== 'npc') continue;
+      // full damage on a direct hit, 70% for splash
+      const dmg = target === directTarget ? damage : Math.max(1, Math.round(damage * 0.7));
+      this.applyDamage(host, target, dmg, owner, now);
+      if (e.slowMs && !target.dead) target.slowUntil = now + e.slowMs;
     }
   }
 

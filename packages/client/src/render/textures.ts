@@ -76,6 +76,215 @@ function brickTile(mortar: string, brick: string, dark: string, seed: number): H
   return c;
 }
 
+// ------------------------------------------------------- PBR stone walls
+
+/** Tiny tileable value noise (bilinear lattice), 0..1. */
+function makeValueNoise(seed: number, period: number): (x: number, y: number) => number {
+  const lattice = new Float32Array(period * period);
+  const r = rand(seed);
+  for (let i = 0; i < lattice.length; i++) lattice[i] = r();
+  const at = (x: number, y: number) => lattice[((y % period + period) % period) * period + ((x % period + period) % period)];
+  return (x, y) => {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const fx = x - xi;
+    const fy = y - yi;
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+    const a = at(xi, yi);
+    const b = at(xi + 1, yi);
+    const c = at(xi, yi + 1);
+    const d = at(xi + 1, yi + 1);
+    return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+  };
+}
+
+export interface PbrMaps {
+  map: THREE.Texture;
+  normalMap: THREE.Texture;
+  roughnessMap: THREE.Texture;
+}
+
+interface StonePalette {
+  /** Per-stone base colors, [r,g,b] 0..255. */
+  stones: [number, number, number][];
+  mortar: [number, number, number];
+  /** Stone row height range in px (256px texture). */
+  rowH: [number, number];
+  stoneW: [number, number];
+}
+
+/**
+ * Generates a tileable stone-block wall as full PBR maps (color + normal +
+ * roughness), modeled after a classic mortared stone wall: irregular courses
+ * of beveled blocks with deep dark joints and a speckled, worn surface.
+ * Everything derives from one procedural height field so the maps agree.
+ */
+function generateStonePBR(seed: number, pal: StonePalette): PbrMaps {
+  const S = 256;
+  const height = new Float32Array(S * S);
+  const stoneOf = new Int32Array(S * S).fill(-1);
+  const r = rand(seed);
+  const edgeNoise = makeValueNoise(seed ^ 0x1111, 64);
+  const surfNoise = makeValueNoise(seed ^ 0x2222, 64);
+  const fineNoise = makeValueNoise(seed ^ 0x3333, 128);
+
+  // --- carve stone courses into the height field
+  const stoneShade: number[] = [];
+  const stoneTilt: [number, number][] = [];
+  let id = 0;
+  let y = 0;
+  while (y < S) {
+    let rowH = pal.rowH[0] + Math.floor(r() * (pal.rowH[1] - pal.rowH[0]));
+    if (S - y - rowH < pal.rowH[0]) rowH = S - y; // last row fills to the edge (vertical tiling)
+    let x = -Math.floor(r() * pal.stoneW[1]); // negative start wraps → horizontal tiling
+    while (x < S) {
+      let w = pal.stoneW[0] + Math.floor(r() * (pal.stoneW[1] - pal.stoneW[0]));
+      const gap = 3;
+      const x0 = x + gap;
+      const y0 = y + gap;
+      const x1 = x + w - gap;
+      const y1 = y + rowH - gap;
+      stoneShade[id] = 0.72 + r() * 0.38;
+      stoneTilt[id] = [(r() - 0.5) * 0.25, (r() - 0.5) * 0.25];
+      for (let py = y0; py < y1; py++) {
+        for (let px = x0; px < x1; px++) {
+          const wx = ((px % S) + S) % S;
+          const wy = ((py % S) + S) % S;
+          // distance to the stone's border, wobbled for a hand-hewn outline
+          const jitter = (edgeNoise(px * 0.35, py * 0.35) - 0.5) * 4;
+          const d = Math.min(px - x0, x1 - 1 - px, py - y0, y1 - 1 - py) + jitter;
+          if (d < 0) continue;
+          const bevel = Math.min(1, d / 4);
+          const tilt = 1 + stoneTilt[id][0] * ((px - x0) / w - 0.5) + stoneTilt[id][1] * ((py - y0) / rowH - 0.5);
+          const surface = 0.85 + surfNoise(px * 0.1, py * 0.1) * 0.2 + fineNoise(px * 0.5, py * 0.5) * 0.1;
+          const idx = wy * S + wx;
+          const h = bevel * tilt * surface;
+          if (h > height[idx]) {
+            height[idx] = h;
+            stoneOf[idx] = id;
+          }
+        }
+      }
+      id++;
+      x += w;
+    }
+    y += rowH;
+  }
+
+  // --- bake color / normal / roughness
+  const color = new Uint8ClampedArray(S * S * 4);
+  const normal = new Uint8ClampedArray(S * S * 4);
+  const rough = new Uint8ClampedArray(S * S * 4);
+  const speckle = rand(seed ^ 0x4444);
+
+  for (let py = 0; py < S; py++) {
+    for (let px = 0; px < S; px++) {
+      const i = py * S + px;
+      const o = i * 4;
+      const h = height[i];
+      const sid = stoneOf[i];
+      let cr: number, cg: number, cb: number, rg: number;
+      if (sid >= 0) {
+        const base = pal.stones[sid % pal.stones.length];
+        const shade = stoneShade[sid] * (0.55 + 0.5 * h);
+        const spk = 1 + (speckle() - 0.5) * 0.22;
+        cr = base[0] * shade * spk;
+        cg = base[1] * shade * spk;
+        cb = base[2] * shade * spk;
+        rg = 150 + surfNoise(px * 0.2, py * 0.2) * 70 + (speckle() - 0.5) * 40;
+      } else {
+        const m = 0.7 + surfNoise(px * 0.15, py * 0.15) * 0.5;
+        cr = pal.mortar[0] * m;
+        cg = pal.mortar[1] * m;
+        cb = pal.mortar[2] * m;
+        rg = 235;
+      }
+      color[o] = cr;
+      color[o + 1] = cg;
+      color[o + 2] = cb;
+      color[o + 3] = 255;
+      rough[o] = rough[o + 1] = rough[o + 2] = rg;
+      rough[o + 3] = 255;
+
+      // normal from height gradient (wrapped Sobel-lite)
+      const xw = (px + 1) % S;
+      const xe = (px - 1 + S) % S;
+      const yn = (py + 1) % S;
+      const ys = (py - 1 + S) % S;
+      const strength = 1.6;
+      const dx = (height[py * S + xe] - height[py * S + xw]) * strength;
+      const dy = (height[ys * S + px] - height[yn * S + px]) * strength;
+      const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
+      normal[o] = (dx * inv * 0.5 + 0.5) * 255;
+      normal[o + 1] = (dy * inv * 0.5 + 0.5) * 255;
+      normal[o + 2] = (inv * 0.5 + 0.5) * 255;
+      normal[o + 3] = 255;
+    }
+  }
+
+  const toTex = (data: Uint8ClampedArray, srgb: boolean) => {
+    const [c, ctx] = makeCanvas(S, S);
+    ctx.putImageData(new ImageData(data, S, S), 0, 0);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    return tex;
+  };
+
+  return {
+    map: toTex(color, true),
+    normalMap: toTex(normal, false),
+    roughnessMap: toTex(rough, false),
+  };
+}
+
+const pbrCache = new Map<string, PbrMaps>();
+
+/** PBR wall materials — grey dungeon stone, warm house masonry, raw rock. */
+export function wallPBR(name: 'stone-wall' | 'house-wall' | 'rock'): PbrMaps {
+  let maps = pbrCache.get(name);
+  if (maps) return maps;
+  switch (name) {
+    case 'stone-wall':
+      maps = generateStonePBR(101, {
+        stones: [
+          [138, 132, 120], [120, 114, 104], [150, 144, 132],
+          [112, 108, 100], [130, 122, 108], [144, 140, 130],
+        ],
+        mortar: [38, 34, 30],
+        rowH: [30, 46],
+        stoneW: [36, 68],
+      });
+      break;
+    case 'house-wall':
+      maps = generateStonePBR(202, {
+        stones: [
+          [146, 112, 78], [128, 96, 66], [158, 124, 90], [120, 92, 64], [140, 108, 76],
+        ],
+        mortar: [52, 40, 28],
+        rowH: [26, 38],
+        stoneW: [40, 72],
+      });
+      break;
+    case 'rock':
+      maps = generateStonePBR(303, {
+        stones: [
+          [96, 92, 86], [84, 82, 78], [106, 102, 94], [76, 74, 70],
+        ],
+        mortar: [24, 22, 20],
+        rowH: [42, 64],
+        stoneW: [48, 96],
+      });
+      break;
+  }
+  pbrCache.set(name, maps);
+  return maps;
+}
+
 // ---------------------------------------------------------------- tiles
 
 const tileCache = new Map<string, THREE.Texture>();

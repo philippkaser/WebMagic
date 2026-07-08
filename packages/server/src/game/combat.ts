@@ -7,7 +7,15 @@ export function spawnProjectile(
   zone: Zone,
   owner: Entity,
   angle: number,
-  opts: { speed: number; damage: number; range: number; light?: number; slowMs?: number; variant?: string }
+  opts: {
+    speed: number;
+    damage: number;
+    range: number;
+    light?: number;
+    slowMs?: number;
+    variant?: string;
+    explodeRadius?: number;
+  }
 ): Entity {
   const e: Entity = {
     id: allocEntityId(),
@@ -30,6 +38,7 @@ export function spawnProjectile(
     ownerId: owner.id,
     light: opts.light,
     slowMs: opts.slowMs,
+    explodeRadius: opts.explodeRadius,
   };
   zone.addEntity(e);
   return e;
@@ -90,6 +99,7 @@ export function castSkill(
         range: def.range,
         light: def.lightColor,
         variant: skillId,
+        explodeRadius: def.aoeRadius,
       });
       break;
     }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TILE_SIZE, Tile, TileMap, isBlocking, isWallLike } from '@webmagic/shared';
-import { spriteDef, tileTexture } from './textures';
+import { spriteDef, tileTexture, wallPBR } from './textures';
 
 export const WALL_HEIGHT = 3.2;
 
@@ -81,13 +81,21 @@ export class LevelMesh {
       this.disposables.push(geo, mat);
     }
 
-    // --- wall meshes
+    // --- wall meshes: full PBR (color + normal + roughness) stone materials
     for (const [texName, bucket] of wallBuckets) {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(bucket.pos, 3));
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(bucket.uv, 2));
       geo.setAttribute('normal', new THREE.Float32BufferAttribute(bucket.nrm, 3));
-      const mat = new THREE.MeshLambertMaterial({ map: tileTexture(texName) });
+      const pbr = wallPBR(texName as 'stone-wall' | 'house-wall' | 'rock');
+      const mat = new THREE.MeshStandardMaterial({
+        map: pbr.map,
+        normalMap: pbr.normalMap,
+        roughnessMap: pbr.roughnessMap,
+        roughness: 1,
+        metalness: 0,
+        normalScale: new THREE.Vector2(1.1, 1.1),
+      });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
       this.group.add(mesh);
@@ -177,9 +185,10 @@ function pushWallQuad(
 ): void {
   const [ax, az, bx, bz] = corners;
   const h = WALL_HEIGHT;
+  const vTop = h / TILE_SIZE; // keep texels square (walls are taller than a tile)
   // two triangles: (a0,b0,b1) (a0,b1,a1) where 0 = ground, 1 = top
   bucket.pos.push(ax, 0, az, bx, 0, bz, bx, h, bz, ax, 0, az, bx, h, bz, ax, h, az);
-  bucket.uv.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
+  bucket.uv.push(0, 0, 1, 0, 1, vTop, 0, 0, 1, vTop, 0, vTop);
   for (let v = 0; v < 6; v++) bucket.nrm.push(normal[0], normal[1], normal[2]);
 }
 

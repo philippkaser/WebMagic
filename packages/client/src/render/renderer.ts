@@ -24,11 +24,16 @@ export class GameRenderer {
   private camera: THREE.PerspectiveCamera;
   private lights: LightPool;
   private hemi: THREE.HemisphereLight;
+  private sun: THREE.DirectionalLight;
+  private moon: THREE.DirectionalLight;
+  private stars: THREE.Points;
+  private starsMat: THREE.PointsMaterial;
   private level: LevelMesh | null = null;
   private torchFlames: THREE.Mesh[] = [];
   readonly sprites = new EntitySprites();
   readonly fx: FxManager;
   private bobPhase = 0;
+  private lastNowSec = 0;
 
   constructor(container: HTMLElement, overlay: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -45,6 +50,38 @@ export class GameRenderer {
 
     this.hemi = new THREE.HemisphereLight(0xbaccdd, 0x33281e, 1);
     this.scene.add(this.hemi);
+
+    // Sun + moon travel across the sky with the world clock.
+    this.sun = new THREE.DirectionalLight(0xffffff, 0);
+    this.scene.add(this.sun);
+    this.scene.add(this.sun.target);
+    this.moon = new THREE.DirectionalLight(0x8899cc, 0);
+    this.scene.add(this.moon);
+    this.scene.add(this.moon.target);
+
+    // Night sky: a dome of stars that follows the camera.
+    const starPos: number[] = [];
+    for (let i = 0; i < 420; i++) {
+      const az = Math.random() * Math.PI * 2;
+      const el = Math.random() * Math.PI * 0.48 + 0.05;
+      const r = 180;
+      starPos.push(Math.cos(az) * Math.cos(el) * r, Math.sin(el) * r, Math.sin(az) * Math.cos(el) * r);
+    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+    this.starsMat = new THREE.PointsMaterial({
+      color: 0xcdd8ff,
+      size: 1.6,
+      sizeAttenuation: false,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      fog: false,
+    });
+    this.stars = new THREE.Points(starGeo, this.starsMat);
+    this.stars.frustumCulled = false;
+    this.scene.add(this.stars);
+
     this.lights = new LightPool(this.scene);
     this.scene.add(this.sprites.group);
     this.scene.fog = new THREE.Fog(0x000000, 20, 90);
@@ -99,25 +136,46 @@ export class GameRenderer {
     const isDungeon = state.zone?.kind === 'dungeon';
 
     // --- day/night atmosphere
+    this.lastNowSec = now / 1000;
     let nightness: number;
     if (isDungeon) {
       nightness = 1;
       this.scene.background = DUNGEON_FOG;
-      this.scene.fog = new THREE.Fog(DUNGEON_FOG, 5, 34);
-      this.hemi.intensity = 0.25;
-      this.hemi.color.setHex(0x555a70);
-      this.hemi.groundColor.setHex(0x16121e);
+      this.scene.fog = new THREE.Fog(DUNGEON_FOG, 6, 46);
+      this.hemi.intensity = 0.5;
+      this.hemi.color.setHex(0x6a6f88);
+      this.hemi.groundColor.setHex(0x201a2c);
+      this.sun.intensity = 0;
+      this.moon.intensity = 0;
+      this.stars.visible = false;
     } else {
       const t = state.worldTime;
-      const daylight = Math.max(0, Math.sin((t - 0.25) * Math.PI * 2));
+      const sunAngle = (t - 0.25) * Math.PI * 2; // elevation phase: 0 at sunrise
+      const daylight = Math.max(0, Math.sin(sunAngle));
       const duskiness = Math.max(0, 1 - Math.abs(daylight - 0.18) * 6);
       nightness = 1 - daylight;
       const sky = NIGHT_SKY.clone().lerp(DAY_SKY, daylight).lerp(DUSK_SKY, duskiness * 0.5);
       this.scene.background = sky;
       this.scene.fog = new THREE.Fog(sky, 24, 110);
-      this.hemi.intensity = 0.12 + daylight * 1.05;
+      this.hemi.intensity = 0.14 + daylight * 0.75;
       this.hemi.color.setHex(0xbaccdd);
       this.hemi.groundColor.setHex(0x33281e);
+
+      // travelling sun — warm and low at dawn/dusk, white at noon
+      const sunDir = new THREE.Vector3(Math.cos(sunAngle), Math.sin(sunAngle), 0.35).normalize();
+      this.sun.position.copy(this.camera.position).addScaledVector(sunDir, 120);
+      this.sun.target.position.copy(this.camera.position);
+      this.sun.intensity = daylight * 1.0;
+      this.sun.color.setHex(0xfff2dd).lerp(new THREE.Color(0xffb060), duskiness);
+
+      // faint blue moonlight so nights read as night, not as a black screen
+      this.moon.position.copy(this.camera.position).addScaledVector(new THREE.Vector3(-sunDir.x, Math.max(0.35, -sunDir.y), -0.3).normalize(), 120);
+      this.moon.target.position.copy(this.camera.position);
+      this.moon.intensity = nightness * 0.22;
+
+      this.stars.visible = true;
+      this.stars.position.set(this.camera.position.x, 0, this.camera.position.z);
+      this.starsMat.opacity = Math.max(0, nightness - 0.35) * 1.4;
     }
 
     // --- camera
@@ -159,5 +217,15 @@ export class GameRenderer {
 
     this.fx.update(dt, this.camera, window.innerWidth, window.innerHeight);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Fireball detonation: shockwave visuals + a real flash of light. */
+  explosion(x: number, y: number, color: number, radius: number): void {
+    this.fx.explosion(x, y, color, radius);
+    this.lights.flash(x, y, color, this.lastNowSec, {
+      intensity: 22 + radius * 4,
+      range: 8 + radius * 2,
+      durationMs: 380,
+    });
   }
 }

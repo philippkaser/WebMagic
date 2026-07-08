@@ -46,10 +46,12 @@ async function boot() {
   done = true;
   login.hide();
   // The server's class wins: an existing character keeps its original class.
-  startGame(conn, welcome.classId, welcome.playerId);
+  startGame(conn, welcome.classId, welcome.playerId, welcome.name);
 }
 
-function startGame(conn: Connection, classId: ClassId, selfEntityId: number) {
+function startGame(initialConn: Connection, classId: ClassId, initialSelfId: number, playerName: string) {
+  let conn = initialConn;
+  let selfEntityId = initialSelfId;
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
 
@@ -85,7 +87,7 @@ function startGame(conn: Connection, classId: ClassId, selfEntityId: number) {
   inventory.onDrop = (itemId) => conn.send({ t: 'drop', itemId });
 
   // ---- server messages
-  conn.onMessage = (msg: ServerMessage) => {
+  const handleServerMessage = (msg: ServerMessage) => {
     switch (msg.t) {
       case 'zone': {
         state.setZone(msg);
@@ -122,10 +124,57 @@ function startGame(conn: Connection, classId: ClassId, selfEntityId: number) {
         break;
     }
   };
-  conn.onClose = () => {
-    hud.setZone('DISCONNECTED', 'refresh the page to reconnect');
-    chat.addNotice('Connection lost. Refresh to reconnect.', 'warn');
+  // ---- automatic reconnection: log back in as the same character
+  const wire = (c: Connection) => {
+    c.onMessage = handleServerMessage;
+    c.onClose = () => void reconnect();
   };
+
+  let reconnecting = false;
+  async function reconnect() {
+    if (reconnecting) return;
+    reconnecting = true;
+    hud.setZone('RECONNECTING…', 'the connection was lost — retrying');
+    chat.addNotice('Connection lost — reconnecting…', 'warn');
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const c = new Connection();
+        await c.connect();
+        const buffered: ServerMessage[] = [];
+        const ok = await new Promise<boolean>((resolve) => {
+          const timeout = setTimeout(() => resolve(false), 5000);
+          c.onMessage = (m) => {
+            if (m.t === 'welcome') {
+              clearTimeout(timeout);
+              selfEntityId = m.playerId;
+              resolve(true);
+            } else if (m.t === 'reject') {
+              clearTimeout(timeout);
+              resolve(false);
+            } else {
+              buffered.push(m); // zone/inv can arrive right behind welcome
+            }
+          };
+          c.onClose = () => {
+            clearTimeout(timeout);
+            resolve(false);
+          };
+          c.send({ t: 'hello', v: PROTOCOL_VERSION, name: playerName, classId });
+        });
+        if (!ok) continue; // name may still be held by the dying session — retry
+        conn = c;
+        wire(c);
+        for (const m of buffered) handleServerMessage(m);
+        chat.addNotice('Reconnected.', 'info');
+        reconnecting = false;
+        return;
+      } catch {
+        // server still down — keep trying
+      }
+    }
+  }
+  wire(conn);
 
   function handleFx(msg: Extract<ServerMessage, { t: 'fx' }>) {
     const now = performance.now();
@@ -149,6 +198,9 @@ function startGame(conn: Connection, classId: ClassId, selfEntityId: number) {
         break;
       case 'nova':
         renderer.fx.nova(msg.x, msg.y, msg.color ?? 0xffffff, msg.amount ?? 3);
+        break;
+      case 'explosion':
+        renderer.explosion(msg.x, msg.y, msg.color ?? 0xff7722, msg.amount ?? 2);
         break;
       case 'pickup':
         renderer.fx.damageNumber(msg.x, msg.y, '+', '#d8b45a');

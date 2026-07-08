@@ -15,7 +15,7 @@ export interface MonsterDef {
   /** Chance to drop a generated item on death (0..1). */
   lootChance: number;
   /** Ranged monsters fire a projectile instead of striking. */
-  projectile?: { speed: number; lightColor: number };
+  projectile?: { speed: number; lightColor: number; aoeRadius?: number };
   /** Where this monster naturally lives. */
   habitat: 'overworld' | 'dungeon';
 }
@@ -94,7 +94,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     attackCooldownMs: 2200,
     xp: 30,
     lootChance: 0.3,
-    projectile: { speed: 12, lightColor: 0xff4422 },
+    projectile: { speed: 12, lightColor: 0xff4422, aoeRadius: 1.6 },
     habitat: 'dungeon',
   },
   ogre: {

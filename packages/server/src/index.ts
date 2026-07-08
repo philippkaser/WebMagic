@@ -7,6 +7,15 @@ import { Session } from './net/session';
 import { staticHandler } from './net/static';
 import { JsonFileStore } from './persist/store';
 
+// Last-resort guards: log and keep the world running instead of dying.
+// (Periodic persistence means a survived glitch loses nothing.)
+process.on('uncaughtException', (err) => {
+  console.error('[fatal-survived] uncaughtException:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[fatal-survived] unhandledRejection:', reason);
+});
+
 async function main() {
   const store = new JsonFileStore(CONFIG.dataDir);
   await store.init();
@@ -16,7 +25,11 @@ async function main() {
 
   // One port for everything: the built client over HTTP + the game WebSocket.
   const httpServer = createServer(staticHandler(CONFIG.clientDist));
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  httpServer.on('clientError', (_err, socket) => {
+    socket.destroy();
+  });
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 16 * 1024 });
+  wss.on('error', (err) => console.error('[net] wss error', err));
 
   wss.on('connection', (ws) => {
     if (game.sessions.size >= CONFIG.maxConnections) {

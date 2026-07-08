@@ -17,6 +17,14 @@ interface NovaRing {
   targetRadius: number;
 }
 
+interface Blast {
+  mesh: THREE.Mesh;
+  mat: THREE.MeshBasicMaterial;
+  ttl: number;
+  maxTtl: number;
+  targetRadius: number;
+}
+
 /**
  * Transient presentation: floating combat numbers (DOM, projected) and
  * expanding nova rings (meshes). Purely cosmetic — driven by fx messages.
@@ -24,6 +32,7 @@ interface NovaRing {
 export class FxManager {
   private texts: FloatText[] = [];
   private rings: NovaRing[] = [];
+  private blasts: Blast[] = [];
   private readonly overlay: HTMLElement;
   private readonly scene: THREE.Scene;
 
@@ -55,6 +64,23 @@ export class FxManager {
     this.rings.push({ mesh, mat, ttl: 0.45, maxTtl: 0.45, targetRadius: radius });
   }
 
+  /** Fireball detonation: an additive shockwave sphere + ground ring. */
+  explosion(x: number, z: number, color: number, radius: number): void {
+    const geo = new THREE.SphereGeometry(0.5, 12, 8);
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 1.0, z);
+    this.scene.add(mesh);
+    this.blasts.push({ mesh, mat, ttl: 0.38, maxTtl: 0.38, targetRadius: radius });
+    this.nova(x, z, color, radius * 0.8);
+  }
+
   update(dt: number, camera: THREE.Camera, width: number, height: number): void {
     const v = new THREE.Vector3();
     for (let i = this.texts.length - 1; i >= 0; i--) {
@@ -75,6 +101,23 @@ export class FxManager {
       t.el.style.left = `${((v.x + 1) / 2) * width}px`;
       t.el.style.top = `${((1 - v.y) / 2) * height}px`;
       t.el.style.opacity = String(Math.min(1, t.ttl * 2));
+    }
+
+    for (let i = this.blasts.length - 1; i >= 0; i--) {
+      const b = this.blasts[i];
+      b.ttl -= dt;
+      if (b.ttl <= 0) {
+        this.scene.remove(b.mesh);
+        b.mesh.geometry.dispose();
+        b.mat.dispose();
+        this.blasts.splice(i, 1);
+        continue;
+      }
+      const progress = 1 - b.ttl / b.maxTtl;
+      // fast expansion with ease-out, whitening core then fading
+      const s = 0.4 + Math.sqrt(progress) * b.targetRadius * 2;
+      b.mesh.scale.set(s, s, s);
+      b.mat.opacity = 0.95 * (1 - progress) * (1 - progress);
     }
 
     for (let i = this.rings.length - 1; i >= 0; i--) {
@@ -103,5 +146,11 @@ export class FxManager {
       r.mat.dispose();
     }
     this.rings = [];
+    for (const b of this.blasts) {
+      this.scene.remove(b.mesh);
+      b.mesh.geometry.dispose();
+      b.mat.dispose();
+    }
+    this.blasts = [];
   }
 }

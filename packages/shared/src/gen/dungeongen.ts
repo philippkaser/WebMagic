@@ -97,12 +97,13 @@ export function generateDungeonFloor(dungeonSeed: number, floor: number): Dungeo
   const exitT = { x: entryRoom.x + 1, y: entryRoom.y + 1 };
   map.set(exitT.x, exitT.y, Tile.PortalPad);
 
-  // --- torches along room walls (sparse — darkness is the point)
+  // --- torches along room walls (dim corners stay, but rooms read clearly)
   const torches: Vec2[] = [];
   for (const r of rooms) {
     const c = roomCenter(r);
-    if (rng.chance(0.7)) torches.push(tileCenter(c.x, r.y)); // north wall
-    if (rng.chance(0.35)) torches.push(tileCenter(r.x, c.y)); // west wall
+    if (rng.chance(0.9)) torches.push(tileCenter(c.x, r.y)); // north wall
+    if (rng.chance(0.6)) torches.push(tileCenter(r.x, c.y)); // west wall
+    if (rng.chance(0.45)) torches.push(tileCenter(r.x + r.w - 1, c.y)); // east wall
   }
   torches.push(tileCenter(entry.x, entry.y));
   torches.push(tileCenter(stairsT.x, stairsT.y));
