@@ -33,11 +33,13 @@ export class Input {
         return;
       }
       this.keys.add(k);
-      if (k === 'e') this.onInteract();
+      if (k === 'f') this.onInteract();
+      if (k === 'e') this.onCast(2); // class skill 1
+      if (k === 'q') this.onCast(3); // class skill 2
       if (k === 'i' || k === 'tab') { e.preventDefault(); this.onToggleInventory(); }
       if (k === 'enter') this.onOpenChat();
       if (k === '/') { e.preventDefault(); this.onOpenChat('/'); }
-      if (k >= '1' && k <= '4') this.onCast(Number(k) - 1);
+      if (k >= '1' && k <= '4') this.onCast(Number(k) - 1); // 1=LMB 2=RMB 3=E 4=Q
     });
     window.addEventListener('keyup', (e) => {
       const k = e.key.toLowerCase();

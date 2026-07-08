@@ -19,7 +19,8 @@ export class Hud {
   private xpFill: HTMLElement;
   private stamFill: HTMLElement;
   private levelBadge: HTMLElement;
-  private skillEls: { root: HTMLElement; cd: HTMLElement; id: SkillId }[] = [];
+  private skillsEl!: HTMLElement;
+  private skillEls: { root: HTMLElement; cd: HTMLElement; id: SkillId | null; label: string }[] = [];
   private zoneName: HTMLElement;
   private zoneSub: HTMLElement;
   private zoneTime!: HTMLElement;
@@ -57,16 +58,9 @@ export class Hud {
     this.stamFill = bottom.querySelector('.stambar .fill')!;
     this.levelBadge = bottom.querySelector('.level-badge')!;
 
-    const skillsEl = bottom.querySelector('.skills')!;
-    CLASSES[classId].skills.forEach((id, i) => {
-      const s = document.createElement('div');
-      s.className = 'skill';
-      s.innerHTML = `<span class="key">${i + 1}</span>${SKILL_ICONS[id]}<div class="cd" style="display:none"></div>`;
-      s.title = `${SKILLS[id].name} — ${SKILLS[id].desc}`;
-      s.addEventListener('click', () => this.onCastSlot(i));
-      skillsEl.appendChild(s);
-      this.skillEls.push({ root: s, cd: s.querySelector('.cd')!, id });
-    });
+    this.skillsEl = bottom.querySelector('.skills')!;
+    // Initial loadout from the class until the first inventory message arrives.
+    this.setLoadout([CLASSES[classId].primary, null, CLASSES[classId].skills[0] ?? null, CLASSES[classId].skills[1] ?? null]);
 
     const top = document.createElement('div');
     top.className = 'hud-top';
@@ -113,8 +107,24 @@ export class Hud {
 
     const hints = document.createElement('div');
     hints.className = 'hint-bar';
-    hints.textContent = 'WASD move · Shift sprint · Space jump · mouse look · click/1-2 skills · E interact · I inventory · Enter chat';
+    hints.textContent = 'WASD move · Shift sprint · Space jump · mouse look · LMB/RMB + E/Q skills · F interact · I inventory · Enter chat';
     overlay.appendChild(hints);
+  }
+
+  /** Rebuild the skill bar for a new loadout [LMB, RMB, E, Q]. */
+  setLoadout(loadout: (SkillId | null)[]): void {
+    const labels = ['LMB', 'RMB', 'E', 'Q'];
+    this.skillsEl.innerHTML = '';
+    this.skillEls = [];
+    loadout.forEach((id, i) => {
+      const s = document.createElement('div');
+      s.className = 'skill' + (id ? '' : ' empty');
+      s.innerHTML = `<span class="key">${labels[i]}</span>${id ? SKILL_ICONS[id] : ''}<div class="cd" style="display:none"></div>`;
+      if (id) s.title = `${SKILLS[id].name} — ${SKILLS[id].desc}`;
+      s.addEventListener('click', () => this.onCastSlot(i));
+      this.skillsEl.appendChild(s);
+      this.skillEls.push({ root: s, cd: s.querySelector('.cd')!, id, label: labels[i] });
+    });
   }
 
   setZone(name: string, sub: string): void {
@@ -162,7 +172,10 @@ export class Hud {
     this.stamFill.classList.toggle('low', stamPct < 25);
 
     for (const sk of this.skillEls) {
-      const locked = SKILLS[sk.id].unlockLevel > s.level;
+      if (!sk.id) continue;
+      // Only class slots (E/Q) are level-gated; weapon skills (LMB/RMB) are not.
+      const classSlot = sk.label === 'E' || sk.label === 'Q';
+      const locked = classSlot && SKILLS[sk.id].unlockLevel > s.level;
       sk.root.classList.toggle('locked', locked);
       const rem = s.cds[sk.id];
       if (locked) {

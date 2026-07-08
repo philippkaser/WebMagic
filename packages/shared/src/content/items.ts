@@ -1,4 +1,5 @@
 import { Rng } from '../math';
+import type { SkillId } from './skills';
 
 export type Slot = 'weapon' | 'armor' | 'helm' | 'boots' | 'trinket';
 export type Rarity = 'common' | 'magic' | 'rare' | 'epic' | 'legendary';
@@ -28,9 +29,21 @@ export interface Item {
   rarity: Rarity;
   ilvl: number;
   affixes: ItemAffix[];
+  /** Weapons define the left-click (primary) and right-click (secondary) skill. */
+  weaponSkills?: { primary: SkillId; secondary: SkillId };
   /** True while carried inside a dungeon and not yet secured (lost on death). */
   dungeonLoot?: boolean;
 }
+
+/** Each weapon base grants a pair of skills — its left- and right-click. */
+export const WEAPON_SKILLS: Record<string, { primary: SkillId; secondary: SkillId }> = {
+  Sword: { primary: 'slash', secondary: 'whirlwind' },
+  Blade: { primary: 'slash', secondary: 'frost_nova' },
+  Axe: { primary: 'slash', secondary: 'whirlwind' },
+  Mace: { primary: 'bash', secondary: 'holy_light' },
+  Warhammer: { primary: 'bash', secondary: 'whirlwind' },
+  Staff: { primary: 'firebolt', secondary: 'frost_nova' },
+};
 
 export const RARITY_ORDER: Rarity[] = ['common', 'magic', 'rare', 'epic', 'legendary'];
 
@@ -147,7 +160,7 @@ export function generateItem(rng: Rng, ilvl: number, forcedRarity?: Rarity): Ite
     }
   }
 
-  return {
+  const item: Item = {
     id: `it_${Date.now().toString(36)}_${(itemCounter++).toString(36)}`,
     name,
     slot,
@@ -155,4 +168,6 @@ export function generateItem(rng: Rng, ilvl: number, forcedRarity?: Rarity): Ite
     ilvl,
     affixes,
   };
+  if (slot === 'weapon') item.weaponSkills = WEAPON_SKILLS[base] ?? WEAPON_SKILLS.Sword;
+  return item;
 }

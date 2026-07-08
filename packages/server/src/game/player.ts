@@ -166,6 +166,25 @@ export class Player {
     return CLASSES[this.classId].skills.filter((s) => SKILLS[s].unlockLevel <= this.level);
   }
 
+  /**
+   * The active skill loadout: [left-click, right-click, E, Q].
+   * The equipped weapon defines the two mouse skills (a class primary as a
+   * bare-fisted fallback); E/Q are the two class skills.
+   */
+  loadout(): (SkillId | null)[] {
+    const cls = CLASSES[this.classId];
+    const ws = this.equipment.weapon?.weaponSkills;
+    return [ws?.primary ?? cls.primary, ws?.secondary ?? null, cls.skills[0] ?? null, cls.skills[1] ?? null];
+  }
+
+  /** Can the player cast this skill right now? Weapon skills ignore level gates. */
+  canCast(skillId: SkillId): boolean {
+    if (!this.loadout().includes(skillId)) return false;
+    const ws = this.equipment.weapon?.weaponSkills;
+    if (ws && (ws.primary === skillId || ws.secondary === skillId)) return true; // granted by the weapon
+    return SKILLS[skillId].unlockLevel <= this.level; // class skill — respect unlock level
+  }
+
   addItem(item: Item): boolean {
     if (this.inventory.length >= INVENTORY_SIZE) return false;
     this.inventory.push(item);

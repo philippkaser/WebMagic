@@ -223,7 +223,8 @@ export class GameServer implements AiHost {
       session.known = currentIds;
 
       const cds: Partial<Record<SkillId, number>> = {};
-      for (const skill of player.unlockedSkills()) {
+      for (const skill of player.loadout()) {
+        if (!skill) continue;
         const rem = player.cooldownRemaining(skill, now);
         if (rem > 0) cds[skill] = Math.round(rem);
       }
@@ -294,6 +295,7 @@ export class GameServer implements AiHost {
       items: player.inventory,
       equipment: player.equipment,
       attrs: player.attrs,
+      loadout: player.loadout(),
     });
   }
 

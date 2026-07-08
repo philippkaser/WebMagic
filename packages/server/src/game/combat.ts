@@ -65,7 +65,7 @@ export function castSkill(
   if (!def) return 'Unknown skill.';
   const ent = player.entity;
   if (ent.dead) return null;
-  if (!player.unlockedSkills().includes(skillId)) return 'Skill not unlocked yet.';
+  if (!player.canCast(skillId)) return "You can't use that skill.";
   if (player.cooldownRemaining(skillId, now) > 0) return null;
   if (player.mp < def.mpCost) return 'Not enough mana.';
 

@@ -199,6 +199,8 @@ export interface InventoryMsg {
   items: Item[];
   equipment: Partial<Record<Slot, Item>>;
   attrs: Attributes;
+  /** Active skill loadout: [left-click, right-click, E, Q]; null = empty slot. */
+  loadout: (SkillId | null)[];
 }
 
 export interface ChatBroadcastMsg {

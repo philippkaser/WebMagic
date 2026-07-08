@@ -1,4 +1,4 @@
-import { AFFIX_LABELS, Attributes, Item, Slot } from '@webmagic/shared';
+import { AFFIX_LABELS, Attributes, Item, SKILLS, Slot } from '@webmagic/shared';
 
 const SLOTS: Slot[] = ['weapon', 'helm', 'armor', 'boots', 'trinket'];
 
@@ -94,10 +94,13 @@ function itemBody(item: Item): string {
     .map((a) => `<div class="affix">+${fmt(a.value)} ${AFFIX_LABELS[a.stat]}</div>`)
     .join('');
   const tag = item.dungeonLoot ? '<div class="item-tag">◆ unclaimed dungeon loot</div>' : '';
+  const skills = item.weaponSkills
+    ? `<div class="affix" style="color:#c8b0e0">⚔ ${SKILLS[item.weaponSkills.primary].name} (L) · ${SKILLS[item.weaponSkills.secondary].name} (R)</div>`
+    : '';
   return `
     <div class="item-name">${escapeHtml(item.name)}</div>
     <div style="color:#9a8f7a">${item.slot} · ilvl ${item.ilvl} · ${item.rarity}</div>
-    ${affixes}${tag}
+    ${skills}${affixes}${tag}
   `;
 }
 

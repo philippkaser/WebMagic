@@ -5,6 +5,7 @@ import {
   PROTOCOL_VERSION,
   STAMINA_MAX,
   ServerMessage,
+  SkillId,
   isCharging,
   isHovering,
   jumpPress,
@@ -120,9 +121,10 @@ function startGame(
     const target = state.nearestInteractable();
     if (target) conn.send({ t: 'interact', id: target.latest.id });
   };
+  // Active skill loadout [LMB, RMB, E, Q], kept in sync from inventory messages.
+  let loadout: (SkillId | null)[] = [CLASSES[classId].primary, null, CLASSES[classId].skills[0] ?? null, CLASSES[classId].skills[1] ?? null];
   const castSlot = (slot: number) => {
-    const skills = CLASSES[classId].skills;
-    const skillId = skills[slot];
+    const skillId = loadout[slot];
     if (!skillId || state.self?.dead) return;
     conn.send({ t: 'cast', skillId, aim: input.facing() });
     renderer.castKick(); // recoil punch for weight
@@ -157,6 +159,8 @@ function startGame(
         break;
       case 'inv':
         inventory.setData(msg.items, msg.equipment, msg.attrs);
+        loadout = msg.loadout;
+        hud.setLoadout(msg.loadout);
         break;
       case 'chat':
         chat.addChat(msg.ch, msg.from, msg.text);
