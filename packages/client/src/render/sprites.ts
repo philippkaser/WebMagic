@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { angleDiff } from '@webmagic/shared';
+import { Tile, angleDiff, worldToTile } from '@webmagic/shared';
 import type { WorldState } from '../state';
 import { spriteDef, type SpriteDef } from './textures';
 
@@ -84,7 +84,12 @@ export class EntitySprites {
       }
 
       const ground = state.map ? state.map.elevationAtWorld(p.x, p.y) : 0;
-      inst.mesh.position.set(p.x, ground + (dead ? 0.25 : yBase + p.z), p.y);
+      // Creatures wading through water sink hip-deep.
+      let sink = 0;
+      if (!dead && state.map && (e.latest.k === 'player' || e.latest.k === 'monster' || e.latest.k === 'npc')) {
+        if (state.map.get(worldToTile(p.x), worldToTile(p.y)) === Tile.Water) sink = 0.42;
+      }
+      inst.mesh.position.set(p.x, ground + (dead ? 0.25 : yBase + p.z) - sink, p.y);
       // billboard toward camera (yaw only)
       inst.mesh.rotation.y = Math.atan2(camX - p.x, camZ - p.y);
       if (dead) {

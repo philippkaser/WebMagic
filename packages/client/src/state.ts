@@ -12,6 +12,7 @@ import {
   generateDungeonFloor,
   generateOverworld,
   moveWithCollision,
+  terrainSpeedMul,
 } from '@webmagic/shared';
 
 /** How far behind server time remote entities are rendered (smooths 10 Hz snapshots). */
@@ -123,7 +124,8 @@ export class WorldState {
 
   private applyMove(mx: number, my: number, dtSec: number, spdMul: number): void {
     if (!this.map || this.self?.dead) return;
-    const s = this.speed * spdMul;
+    // terrainSpeedMul mirrors the server exactly (wading is slow on both sides)
+    const s = this.speed * spdMul * terrainSpeedMul(this.map, this.x, this.y);
     const res = moveWithCollision(this.map, this.x, this.y, mx * s * dtSec, my * s * dtSec, PLAYER_RADIUS);
     this.x = res.x;
     this.y = res.y;
@@ -141,13 +143,13 @@ export class WorldState {
     let py = snap.self.y;
     if (this.map && !snap.self.dead) {
       for (const p of this.pending) {
-        const s = this.speed * p.spdMul;
+        const s = this.speed * p.spdMul * terrainSpeedMul(this.map, px, py);
         const r = moveWithCollision(this.map, px, py, p.mx * s * p.dt, p.my * s * p.dt, PLAYER_RADIUS);
         px = r.x;
         py = r.y;
       }
       if (this.open) {
-        const s = this.speed * this.open.spdMul;
+        const s = this.speed * this.open.spdMul * terrainSpeedMul(this.map, px, py);
         const r = moveWithCollision(this.map, px, py, this.open.mx * s * this.open.dt, this.open.my * s * this.open.dt, PLAYER_RADIUS);
         px = r.x;
         py = r.y;
@@ -215,7 +217,7 @@ export class WorldState {
       const isTarget =
         k === 'portal' ||
         k === 'loot' ||
-        (k === 'npc' && ['villager', 'signpost', 'campfire', 'chicken'].includes(e.latest.v));
+        (k === 'npc' && ['villager', 'signpost', 'campfire', 'chicken', 'shrine', 'obelisk'].includes(e.latest.v));
       if (!isTarget || e.latest.a === 'dead') continue;
       const d = dist(this.x, this.y, e.nextX, e.nextY);
       if (d < INTERACT_RANGE + 0.8 && d < bestD) {

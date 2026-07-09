@@ -35,6 +35,8 @@ export interface PlayerRecord {
   y: number;
   /** scrypt `salt:hash` of the account passphrase; absent = open name. */
   passHash?: string;
+  /** Region ids this hero has discovered (exploration XP is once per region). */
+  discovered?: number[];
 }
 
 export interface DungeonRunState {
@@ -82,6 +84,8 @@ export class Player {
   zoneId = 'overworld';
   dungeonRun: DungeonRunState | null = null;
   respawnAt = 0;
+  /** Named regions this hero has set foot in (exploration XP once each). */
+  discovered: Set<number>;
   /** Last safe overworld position — used for respawns and dungeon exits. */
   lastOverworld = { x: 0, y: 0 };
 
@@ -93,6 +97,7 @@ export class Player {
     this.xp = record.xp;
     this.inventory = record.inventory;
     this.equipment = record.equipment;
+    this.discovered = new Set(record.discovered ?? []);
 
     this.entity = {
       id: allocEntityId(),
@@ -286,6 +291,7 @@ export class Player {
       x: this.entity.x,
       y: this.entity.y,
       passHash: this.passHash,
+      discovered: [...this.discovered],
     };
   }
 }

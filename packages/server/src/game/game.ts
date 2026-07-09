@@ -1,5 +1,6 @@
 import {
   AOI_RADIUS,
+  Biome,
   CHAT_LOCAL_RADIUS,
   CHAT_MAX_LENGTH,
   CLASSES,
@@ -13,6 +14,7 @@ import {
   PICKUP_RADIUS,
   PROTOCOL_VERSION,
   PortalDef,
+  RegionDef,
   Rng,
   TILE_SIZE,
   SNAPSHOT_EVERY,
@@ -26,6 +28,7 @@ import {
   speedMultiplier,
   stepStamina,
   stepVertical,
+  terrainSpeedMul,
   Tile,
   VillageDef,
   ZoneMsg,
@@ -65,6 +68,7 @@ export class GameServer implements AiHost {
   private playersByEntity = new Map<number, Player>();
   private villages: VillageDef[] = [];
   private portalsById = new Map<number, PortalDef>();
+  private regions: RegionDef[] = [];
 
   private tickCount = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -83,6 +87,7 @@ export class GameServer implements AiHost {
   start(): void {
     const world = generateOverworld(CONFIG.worldSeed);
     this.villages = world.villages;
+    this.regions = world.regions;
     for (const p of world.portals) this.portalsById.set(p.id, p);
 
     this.overworld = new Zone('overworld', 'overworld', world.map, world.torches);
@@ -190,6 +195,8 @@ export class GameServer implements AiHost {
 
       if (zone.kind === 'overworld') {
         player.lastOverworld = { x: ent.x, y: ent.y };
+        // Exploration pays: first footsteps into a named region grant XP.
+        if (this.tickCount % 20 === 0) this.checkDiscovery(zone, player);
       }
 
       // Walk-over loot pickup.
@@ -216,6 +223,39 @@ export class GameServer implements AiHost {
           zone.applyDamage(this, ent, 9 + floor * 3, null, now);
         }
       }
+    }
+  }
+
+  /**
+   * First footsteps into a named region: a discovery banner + XP scaled to
+   * the region's size. Persists with the character, so every hero has a map
+   * they're still filling in.
+   */
+  private checkDiscovery(zone: Zone, player: Player): void {
+    const ent = player.entity;
+    const tx = worldToTile(ent.x);
+    const ty = worldToTile(ent.y);
+    const b = zone.map.biomeAt(tx, ty);
+    const kind: RegionDef['kind'] | null =
+      b === Biome.Forest ? 'forest'
+      : b === Biome.Marsh ? 'marsh'
+      : b === Biome.Highland ? 'highland'
+      : b === Biome.Ashland ? 'ashland'
+      : null;
+    if (!kind) return;
+    for (const r of this.regions) {
+      if (r.kind !== kind || player.discovered.has(r.id)) continue;
+      if (dist(tx, ty, r.cx, r.cy) > r.radius * 1.5) continue;
+      player.discovered.add(r.id);
+      const xp = 25 + Math.round(r.tiles / 15);
+      const gained = player.addXp(xp);
+      this.notify(player, `You discover ${r.name}. (+${xp} XP)`, 'loot');
+      if (gained > 0) {
+        this.broadcastFx(zone, { t: 'fx', kind: 'levelup', x: ent.x, y: ent.y, entId: ent.id });
+        this.notify(player, `Level up! You are now level ${player.level}.`, 'info');
+        this.sendInventory(player);
+      }
+      return;
     }
   }
 
@@ -638,7 +678,7 @@ export class GameServer implements AiHost {
             isCharging(player.vert),
             isHovering(player.vert, player.classId, now)
           );
-          const speed = player.stats.moveSpeed * slowed * gamefeel;
+          const speed = player.stats.moveSpeed * slowed * gamefeel * terrainSpeedMul(zone.map, ent.x, ent.y);
           zone.moveEntity(ent, mx * speed * dt, my * speed * dt);
           ent.anim = 'move';
         }

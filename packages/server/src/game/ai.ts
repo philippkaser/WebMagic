@@ -1,4 +1,4 @@
-import { MonsterDef, Vec2, dist, hasLineOfSight } from '@webmagic/shared';
+import { MonsterDef, Vec2, dist, hasLineOfSight, terrainSpeedMul } from '@webmagic/shared';
 import { Entity, VillagerActivity, VillagerRoutine } from './entities';
 import { Zone, ZoneHost } from './zone';
 import { spawnProjectile } from './combat';
@@ -163,8 +163,12 @@ function walkWaypoint(zone: Zone, e: Entity, wp: Vec2, dt: number, now: number):
   return false;
 }
 
-function effectiveSpeed(e: Entity, now: number): number {
-  return e.speed * (e.slowUntil && now < e.slowUntil ? 0.5 : 1);
+function effectiveSpeed(zone: Zone, e: Entity, now: number): number {
+  return (
+    e.speed *
+    (e.slowUntil && now < e.slowUntil ? 0.5 : 1) *
+    terrainSpeedMul(zone.map, e.x, e.y) // wildlife wades too
+  );
 }
 
 function moveToward(zone: Zone, e: Entity, tx: number, ty: number, dt: number, now: number): void {
@@ -175,7 +179,7 @@ function moveToward(zone: Zone, e: Entity, tx: number, ty: number, dt: number, n
     e.anim = 'idle';
     return;
   }
-  const sp = effectiveSpeed(e, now);
+  const sp = effectiveSpeed(zone, e, now);
   const step = Math.min(d, sp * dt);
   e.facing = Math.atan2(dy, dx);
   e.anim = 'move';

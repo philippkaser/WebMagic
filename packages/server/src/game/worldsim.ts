@@ -2,18 +2,21 @@ import {
   DAY_LENGTH_MS,
   HouseDef,
   MONSTERS,
+  MonsterDef,
   OverworldData,
   RegionDef,
   Rng,
   TILE_SIZE,
   Vec2,
   dist,
+  generateItem,
   hashSeed,
+  scaledMonster,
   tileCenter,
 } from '@webmagic/shared';
 import { Entity, RoutineStop } from './entities';
 import { Zone } from './zone';
-import { spawnCritter, spawnFixture, spawnMonster, spawnNpc, spawnPortal } from './spawn';
+import { dropLoot, spawnCritter, spawnFixture, spawnMonster, spawnNpc, spawnPortal } from './spawn';
 
 const SIGN_LINES = [
   'Rest here. The wilds beyond do not forgive the careless.',
@@ -41,6 +44,18 @@ const WOLF_CHECK_MS = 8_000;
 const EXCURSION_MS = 160_000;
 
 const TRAVELER_TITLES = ['a wandering peddler', 'a hooded pilgrim', 'a road-weary bard', 'a lost traveler', 'a tax collector'];
+const ALPHA_NAMES: Record<string, string[]> = {
+  wolf: ['Greymaw', 'Duskfang', 'Old One-Eye', 'Snowjaw'],
+  goblin: ['Snaggletooth', 'King Nibbles', 'Grubwart', 'Fleabite'],
+  orc: ['Skullcleaver', 'Bonechewer', 'Ironhide', 'Redtusk'],
+};
+
+/** Compass name for a tile-space offset (+x = east, +y = south). */
+function octantName(dx: number, dy: number): string {
+  const dirs = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
+  const a = Math.atan2(dy, dx);
+  return dirs[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8];
+}
 const WILD_FLAVOR = [
   'A cold wind sweeps down from the mountains.',
   'Somewhere far off, a wolf howls.',
@@ -200,13 +215,26 @@ export class WorldSim {
         spawnCritter(this.zone, 'chicken', spot.x, spot.y);
       }
 
-      // A campfire to rest at, and a signpost to read.
+      // A campfire to rest at, and a signpost that points the way to the
+      // nearest rift — portals are destinations, not secrets.
       const fire = this.openSpot(center.x, center.y, v.radius * TILE_SIZE * 0.35);
       spawnFixture(this.zone, 'campfire', fire.x, fire.y, { light: 0xff8a3c });
+      let nearestPortal = this.world.portals[0];
+      let pd = Infinity;
+      for (const p of this.world.portals) {
+        const d = dist(v.cx, v.cy, p.tx, p.ty);
+        if (d < pd) {
+          pd = d;
+          nearestPortal = p;
+        }
+      }
+      const portalHint = nearestPortal
+        ? ` ${nearestPortal.name} lies to the ${octantName(nearestPortal.tx - v.cx, nearestPortal.ty - v.cy)} — follow the violet light.`
+        : '';
       const sign = this.openSpot(center.x, center.y, v.radius * TILE_SIZE * 0.55);
       spawnFixture(this.zone, 'signpost', sign.x, sign.y, {
         name: v.name,
-        interactText: `${v.name} — ${this.rng.pick(SIGN_LINES)}`,
+        interactText: `${v.name} — ${this.rng.pick(SIGN_LINES)}${portalHint}`,
       });
     }
 
@@ -485,14 +513,46 @@ export class WorldSim {
     if (now < this.nextEventAt) return;
     this.nextEventAt = now + EVENT_INTERVAL_MS + this.rng.range(0, 8_000);
     const roll = this.rng.next();
-    if (roll < 0.42) {
+    if (roll < 0.3) {
       host.systemNotice(this.rng.pick(WILD_FLAVOR));
-    } else if (roll < 0.7) {
+    } else if (roll < 0.55) {
       this.spawnTraveler(host, now);
-    } else if (roll < 0.92) {
+    } else if (roll < 0.8) {
       this.spawnWildPack(host, now);
+    } else if (roll < 0.93) {
+      this.fallingStar(host, now);
     } else {
       host.systemNotice(this.rng.pick(OMENS));
+    }
+  }
+
+  /**
+   * A star falls in the wilds and leaves treasure where it struck — a glowing
+   * loot drop with a compass hint, so there's always somewhere worth running.
+   */
+  private fallingStar(host: WorldSimHost, now: number): void {
+    const map = this.world.map;
+    for (let tries = 0; tries < 24; tries++) {
+      const tx = this.rng.int(14, map.w - 14);
+      const ty = this.rng.int(14, map.h - 14);
+      if (this.world.villages.some((v) => dist(tx, ty, v.cx, v.cy) < v.radius + 6)) continue;
+      const c = tileCenter(tx, ty);
+      if (map.blockedAtWorld(c.x, c.y)) continue;
+      const item = generateItem(this.rng, 3 + this.rng.int(0, 7), undefined, 18);
+      const loot = dropLoot(this.zone, c.x, c.y, item, now);
+      loot.despawnAt = now + 180_000; // three minutes to claim it
+      loot.light = 0x9adfff;
+      let v = this.world.villages[0];
+      let bd = Infinity;
+      for (const vv of this.world.villages) {
+        const d = dist(tx, ty, vv.cx, vv.cy);
+        if (d < bd) {
+          bd = d;
+          v = vv;
+        }
+      }
+      host.systemNotice(`✦ A star falls to the ${octantName(tx - v.cx, ty - v.cy)} of ${v.name} — something glitters where it struck!`);
+      return;
     }
   }
 
@@ -511,7 +571,11 @@ export class WorldSim {
     host.systemNotice(`You spot ${title} on the road${to ? ` to ${to.name}` : ''}.`);
   }
 
-  /** A roaming monster pack prowls the wilds for a while, then wanders off. */
+  /**
+   * A roaming monster pack prowls the wilds for a while, then wanders off.
+   * Sometimes an Alpha leads it — a named brute with guaranteed loot, its
+   * baleful glow visible from afar. Emergent boss hunts.
+   */
   private spawnWildPack(host: WorldSimHost, now: number): void {
     const kinds = ['goblin', 'wolf', 'orc'] as const;
     const kind = this.rng.pick(kinds);
@@ -523,7 +587,26 @@ export class WorldSim {
       if (m.ai) m.ai.wanderRadius = 12;
       m.despawnAt = now + 150_000; // the pack moves on if left alone
     }
-    host.systemNotice(`A pack of ${MONSTERS[kind].name}s has been sighted prowling the wilds.`);
+    if (this.rng.chance(0.35)) {
+      const base = scaledMonster(MONSTERS[kind], 2);
+      const alphaName = this.rng.pick(ALPHA_NAMES[kind]);
+      const alphaDef: MonsterDef = {
+        ...base,
+        name: `${alphaName} the Alpha`,
+        hp: Math.round(base.hp * 1.7),
+        damage: Math.round(base.damage * 1.2),
+        xp: base.xp * 3,
+        lootChance: 1,
+        radius: Math.min(0.8, base.radius * 1.25),
+      };
+      const alpha = spawnMonster(this.zone, alphaDef, spot.x, spot.y);
+      alpha.light = 0xff5030; // a baleful glow marks the prize
+      if (alpha.ai) alpha.ai.wanderRadius = 12;
+      alpha.despawnAt = now + 240_000;
+      host.systemNotice(`⚔ A pack of ${MONSTERS[kind].name}s prowls the wilds — led by ${alphaName} the Alpha. Slay it for its hoard!`);
+    } else {
+      host.systemNotice(`A pack of ${MONSTERS[kind].name}s has been sighted prowling the wilds.`);
+    }
   }
 
   /**

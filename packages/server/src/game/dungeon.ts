@@ -1,6 +1,7 @@
 import {
   DungeonFloorData,
   MONSTERS,
+  MonsterDef,
   PortalDef,
   Rng,
   generateDungeonFloor,
@@ -9,7 +10,20 @@ import {
   scaledMonster,
 } from '@webmagic/shared';
 import { Zone } from './zone';
-import { dropLoot, spawnMonster, spawnPortal } from './spawn';
+import { dropLoot, spawnFixture, spawnMonster, spawnPortal } from './spawn';
+
+/** A champion: bigger, meaner, glowing — and always carrying loot. */
+function championOf(def: MonsterDef): MonsterDef {
+  return {
+    ...def,
+    name: `${def.name} Champion`,
+    hp: Math.round(def.hp * 1.9),
+    damage: Math.round(def.damage * 1.25),
+    xp: Math.round(def.xp * 2.5),
+    lootChance: 1,
+    radius: Math.min(0.85, def.radius * 1.25),
+  };
+}
 
 /**
  * One live dungeon run. Instances are shared: everyone who steps into the
@@ -41,21 +55,35 @@ export class DungeonInstance {
 
     const data = generateDungeonFloor(this.seed, floor);
     const zone = new Zone(`${this.key}:${floor}`, 'dungeon', data.map, data.torches);
+    const rng = new Rng(hashSeed(this.seed, floor, 0x100f));
 
     // Difficulty scales with both the portal's base level and the depth.
+    // A few spawns roll up into champions — named threats with sure loot.
     const depthScale = floor + Math.floor(this.portal.level / 2);
     for (const spawn of data.monsterSpawns) {
-      spawnMonster(zone, scaledMonster(MONSTERS[spawn.monster], depthScale), spawn.x, spawn.y);
+      let def = scaledMonster(MONSTERS[spawn.monster], depthScale);
+      const isChampion = rng.chance(0.13);
+      if (isChampion) def = championOf(def);
+      const m = spawnMonster(zone, def, spawn.x, spawn.y);
+      if (isChampion) m.light = 0xc03040; // a red gleam in the dark marks it
     }
 
     // Floor loot piles — pre-rolled treasure lying in the dark.
-    const rng = new Rng(hashSeed(this.seed, floor, 0x100f));
     for (const l of data.lootSpawns) {
       // Deeper floors: higher item level AND better rarity odds (magic find).
       const item = generateItem(rng, this.portal.level + floor * 3, undefined, floor * 5);
       const loot = dropLoot(zone, l.x, l.y, item, now);
       loot.despawnAt = undefined; // floor loot never despawns
     }
+
+    // A forgotten shrine on every floor: full restore + a short blessing,
+    // once per player per 45s — the breather that shapes a floor's rhythm.
+    const shrineAt = data.lootSpawns[data.lootSpawns.length - 1] ?? data.stairs;
+    spawnFixture(zone, 'shrine', shrineAt.x + 0.9, shrineAt.y - 0.4, {
+      name: 'Forgotten Shrine',
+      interactText: 'Old magic answers your touch — your wounds close and your blood sings.',
+      light: 0x66ffcc,
+    });
 
     if (data.exitPortal) {
       spawnPortal(zone, data.exitPortal.x, data.exitPortal.y, 'Exit Portal', this.portal.id, 'dungeon-exit');

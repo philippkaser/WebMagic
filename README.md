@@ -97,6 +97,16 @@ to disable the `/goto` and `/xp` dev commands.
   species, feature density, elevation character and minimap colours. Connected
   sweeps big enough to matter become **named regions** (*The Gloomwood*, *Mirebog*,
   *The Grey Tors*, *The Cinderwaste*…) that the life sim homes creatures in.
+  **First footsteps into a named region grant discovery XP**, once per hero.
+- **A world you can actually cross** — water is **wadable** (you sink chest-deep,
+  move slowly, splash; so does the wildlife), forests are woven with **game
+  trails**, and generation **guarantees on foot access to every portal** (a BFS
+  pass carves a ravine through any rare rock pocket). **Eight portals** dot the
+  wilds, each crowned with a violet **beacon beam** visible across the map;
+  village **signposts point toward the nearest one**, and the minimap always
+  shows portal and village markers — clamped to its edge like a compass when
+  they're beyond view. Falling stars leave glowing treasure with a compass hint,
+  and wild packs are sometimes led by a **named Alpha** with a guaranteed hoard.
 - **A real life sim** — predators live by **hunger**. Wolf packs den deep in the
   named forests and hunt the deer that live there; each forest's deer herd regrows
   slowly toward carrying capacity, so an overhunted forest starves its pack — and
@@ -127,6 +137,9 @@ to disable the `/goto` and `/xp` dev commands.
   stalked by skeletons, imps, ogres, fast **cave spiders**, and **gelatinous slimes
   that split into two slimelets when you cut them down** — and studded with **spike
   traps** that bite grounded heroes, so time a jump to cross them unharmed.
+  Denser floors roll **Champions** — red-gleaming brutes with guaranteed loot —
+  and every floor hides a **Forgotten Shrine**: a full restore and a short
+  blessing that shapes the floor's rhythm between fights.
 - **Doom-style rendering** — low-res upscaled framebuffer, billboard pixel sprites lit
   by the scene (humanoids are **4-directional** — front/back/side views chosen from
   their facing relative to the camera — drawn at higher resolution with two-tone

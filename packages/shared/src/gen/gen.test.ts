@@ -47,7 +47,7 @@ test('different seeds produce different worlds', () => {
 test('overworld has the expected landmarks and a solid border', () => {
   const w = generateOverworld(555);
   assert.equal(w.villages.length, 6);
-  assert.equal(w.portals.length, 4);
+  assert.equal(w.portals.length, 8);
   assert.ok(w.camps.length > 0);
   assert.ok(w.pois.length > 0, 'wilderness landmarks exist');
   assert.ok(w.pois.some((p) => p.kind === 'shrine'), 'has a shrine');
@@ -87,6 +87,29 @@ test('every village inn spawn is on walkable ground', () => {
   for (const v of w.villages) {
     assert.ok(!w.map.blockedAtWorld(v.innSpawn.x, v.innSpawn.y), `inn spawn for ${v.name} must be walkable`);
   }
+});
+
+// ---- traversal ---------------------------------------------------------------
+
+test('every portal is reachable on foot from a village (forests and water do not wall the world)', () => {
+  for (const seed of [1337, 777, 42]) {
+    const w = generateOverworld(seed);
+    const v = w.villages[0];
+    for (const p of w.portals) {
+      assert.ok(
+        reachable(w.map, v.cx, v.cy, p.tx, p.ty),
+        `seed ${seed}: ${p.name} must be walkable from ${v.name}`
+      );
+    }
+  }
+});
+
+test('water is wadable, trees are not', () => {
+  const m = new TileMap(4, 4, Tile.Grass);
+  m.set(1, 1, Tile.Water);
+  m.set(2, 1, Tile.Tree);
+  assert.ok(!m.blockedTile(1, 1), 'water does not block');
+  assert.ok(m.blockedTile(2, 1), 'trees block');
 });
 
 // ---- biomes + regions -------------------------------------------------------

@@ -136,7 +136,7 @@ export function generateDungeonFloor(dungeonSeed: number, floor: number): Dungeo
   for (const r of rooms) {
     if (r === entryRoom) continue;
     const isStairsRoom = r === stairsRoom;
-    const count = isStairsRoom ? rng.int(3, 4) : rng.int(1, 3);
+    const count = isStairsRoom ? rng.int(3, 5) : rng.int(2, 4);
     for (let i = 0; i < count; i++) {
       const tx = rng.int(r.x + 1, r.x + r.w - 2);
       const ty = rng.int(r.y + 1, r.y + r.h - 2);
@@ -150,7 +150,7 @@ export function generateDungeonFloor(dungeonSeed: number, floor: number): Dungeo
   const lootSpawns: Vec2[] = [];
   for (const r of rooms) {
     if (r === entryRoom) continue;
-    if (rng.chance(0.4)) {
+    if (rng.chance(0.55)) {
       const tx = rng.int(r.x + 1, r.x + r.w - 2);
       const ty = rng.int(r.y + 1, r.y + r.h - 2);
       lootSpawns.push(tileCenter(tx, ty));

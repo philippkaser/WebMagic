@@ -7,6 +7,8 @@ import {
   STAMINA_MAX,
   ServerMessage,
   SkillId,
+  Tile,
+  worldToTile,
   isCharging,
   isHovering,
   jumpPress,
@@ -95,6 +97,7 @@ function startGame(
   let wasGrounded = true;
   let peakAir = 0; // track fall height so only real landings kick up dust
   let hoverFxAt = 0; // throttle for hover particles
+  let splashFxAt = 0; // throttle for wading splashes
 
   // ---- input wiring
   input.isTyping = () => chat.isOpen;
@@ -326,6 +329,12 @@ function startGame(
       conn.send({ t: 'input', seq: chunk.seq, mx: chunk.mx, my: chunk.my, f: input.facing(), dt: chunk.dt, sprint: chunk.sprint });
     }
 
+    // Wading kicks up water while you push through it.
+    if (moving && state.map && state.map.get(worldToTile(state.x), worldToTile(state.y)) === Tile.Water && now - splashFxAt > 260) {
+      splashFxAt = now;
+      renderer.fx.splash(state.x, state.y);
+    }
+
     // interact prompt
     const target = state.nearestInteractable();
     if (target) {
@@ -335,6 +344,8 @@ function startGame(
       else if (l.k === 'loot') label = `F — pick up ${l.n ?? 'loot'}`;
       else if (l.v === 'signpost') label = 'F — read the sign';
       else if (l.v === 'campfire') label = 'F — rest at the fire';
+      else if (l.v === 'shrine') label = 'F — pray at the shrine';
+      else if (l.v === 'obelisk') label = 'F — study the obelisk';
       else if (l.v === 'chicken') label = 'F — pet the chicken';
       else if (l.k === 'npc') label = `F — talk to ${l.n ?? 'villager'}`;
       hud.setPrompt(label);

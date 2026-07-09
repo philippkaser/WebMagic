@@ -106,6 +106,7 @@ const VILLAGE_NAMES = [
 
 const PORTAL_NAMES = [
   'Catacombs of Vhal', 'The Sunken Halls', 'Maw of Cinders', 'Barrow of Kings',
+  'The Howling Depths', 'Vault of Embers', 'The Shattered Sanctum', 'Tomb of the Pale King',
 ];
 
 const FOREST_NAMES = [
@@ -180,8 +181,9 @@ export function generateOverworld(seed: number): OverworldData {
       if (map.get(tx, ty) !== Tile.Grass) continue;
       switch (map.biomeAt(tx, ty)) {
         case Biome.Forest:
-          // dense woods with organic clearings — roads are carved through later
-          if (clump(tx / 3.2, ty / 3.2) > 0.42) map.set(tx, ty, Tile.Tree);
+          // woods with organic clearings — dense enough to read as forest,
+          // open enough to walk through (trails are carved below, too)
+          if (clump(tx / 3.2, ty / 3.2) > 0.52) map.set(tx, ty, Tile.Tree);
           break;
         case Biome.Marsh:
           // still black pools threaded with dry ground
@@ -208,6 +210,21 @@ export function generateOverworld(seed: number): OverworldData {
   // --- named regions: connected biome sweeps become places with names
   const regions = extractRegions(map);
 
+  // --- game trails: every named forest gets winding paths worn through it,
+  // crossing at its heart — forests are places to travel, not walls.
+  for (const forest of regions.filter((r) => r.kind === 'forest')) {
+    const trails = Math.max(2, Math.round(forest.radius / 6));
+    for (let t = 0; t < trails; t++) {
+      const ang = (t / trails) * Math.PI + rng.range(-0.3, 0.3);
+      const r = forest.radius * 1.1;
+      carveTrail(
+        rng, map,
+        { x: forest.cx - Math.cos(ang) * r, y: forest.cy - Math.sin(ang) * r },
+        { x: forest.cx + Math.cos(ang) * r, y: forest.cy + Math.sin(ang) * r }
+      );
+    }
+  }
+
   // --- villages: on open meadow, spread apart
   const villages: VillageDef[] = [];
   const villageCount = 6;
@@ -233,7 +250,10 @@ export function generateOverworld(seed: number): OverworldData {
   // hidden deep inside the named forests (the packs live there — hunger is
   // what draws them out into the open world).
   const camps: CampDef[] = [];
-  const campMonsters: MonsterId[] = ['goblin', 'goblin', 'goblin', 'orc', 'orc', 'orc', 'goblin', 'orc'];
+  const campMonsters: MonsterId[] = [
+    'goblin', 'goblin', 'goblin', 'orc', 'orc', 'orc',
+    'goblin', 'orc', 'goblin', 'orc', 'goblin', 'orc',
+  ];
   const campSpots = pickSpreadPoints(rng, map, campMonsters.length, 20, 10, (x, y) =>
     villages.every((v) => dist(x, y, v.cx, v.cy) > v.radius + 14) &&
     map.biomeAt(x, y) !== Biome.Marsh
@@ -279,9 +299,10 @@ export function generateOverworld(seed: number): OverworldData {
     });
   }
 
-  // --- dungeon portals
+  // --- dungeon portals: eight rifts scattered across the wilds, so one is
+  // never far from wherever you are
   const portals: PortalDef[] = [];
-  const portalSpots = pickSpreadPoints(rng, map, PORTAL_NAMES.length, 40, 12, (x, y) =>
+  const portalSpots = pickSpreadPoints(rng, map, PORTAL_NAMES.length, 30, 12, (x, y) =>
     villages.every((v) => dist(x, y, v.cx, v.cy) > v.radius + 8) &&
     camps.every((c) => dist(x, y, c.cx, c.cy) > c.radius + 6)
   );
@@ -292,7 +313,7 @@ export function generateOverworld(seed: number): OverworldData {
     const c = tileCenter(x, y);
     torches.push({ x: c.x - 3, y: c.y - 3 });
     torches.push({ x: c.x + 3, y: c.y - 3 });
-    portals.push({ id: i, name: PORTAL_NAMES[i], tx: x, ty: y, level: 2 + i * 3 });
+    portals.push({ id: i, name: PORTAL_NAMES[i], tx: x, ty: y, level: 2 + i * 2 });
   }
 
   // --- wilderness landmarks: shrines, obelisks and ruins, out in the wilds
@@ -324,6 +345,17 @@ export function generateOverworld(seed: number): OverworldData {
       clearArea(map, x, y, 2);
       torches.push(c);
       pois.push({ kind, x: c.x, y: c.y, text: SHRINE_LINES[shrineN++ % SHRINE_LINES.length] });
+    }
+  }
+
+  // --- guarantee: every portal is reachable on foot from the first village.
+  // Rare rock pockets or tree walls around a portal get a path carved through
+  // — a portal you cannot walk to is a portal that doesn't exist.
+  {
+    const reach = computeReachable(map, villages[0]?.cx ?? 4, villages[0]?.cy ?? 4);
+    for (const p of portals) {
+      if (reach[p.ty * map.w + p.tx]) continue;
+      carveAccess(map, p.tx, p.ty, villages[0]?.cx ?? 4, villages[0]?.cy ?? 4, reach);
     }
   }
 
@@ -453,6 +485,73 @@ function extractRegions(map: TileMap): RegionDef[] {
     }
   }
   return regions;
+}
+
+/** BFS over walkable tiles from a start point; returns the reachable mask. */
+function computeReachable(map: TileMap, sx: number, sy: number): Uint8Array {
+  const seen = new Uint8Array(map.w * map.h);
+  const queue: number[] = [];
+  const start = sy * map.w + sx;
+  seen[start] = 1;
+  queue.push(start);
+  while (queue.length > 0) {
+    const i = queue.pop()!;
+    const ix = i % map.w;
+    const iy = (i / map.w) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = ix + dx;
+      const ny = iy + dy;
+      if (nx < 0 || ny < 0 || nx >= map.w || ny >= map.h) continue;
+      const ni = ny * map.w + nx;
+      if (seen[ni] || map.blockedTile(nx, ny)) continue;
+      seen[ni] = 1;
+      queue.push(ni);
+    }
+  }
+  return seen;
+}
+
+/**
+ * Cut a walkable path from an isolated point toward a reference point,
+ * clearing natural blockers (trees, rock) until it meets already-reachable
+ * ground. Reads as a ravine or a cut trail, never touches buildings.
+ */
+function carveAccess(map: TileMap, fromX: number, fromY: number, toX: number, toY: number, reach: Uint8Array): void {
+  let x = fromX;
+  let y = fromY;
+  let guard = 0;
+  while ((x !== toX || y !== toY) && guard++ < 1200) {
+    if (reach[y * map.w + x]) return; // joined the connected world
+    const dx = Math.sign(toX - x);
+    const dy = Math.sign(toY - y);
+    if (dx !== 0 && (dy === 0 || (x + y) % 2 === 0)) x += dx;
+    else if (dy !== 0) y += dy;
+    for (const [ox, oy] of [[0, 0], [1, 0], [0, 1]] as const) {
+      const t = map.get(x + ox, y + oy);
+      if (t === Tile.Tree || t === Tile.Rock) map.set(x + ox, y + oy, Tile.Grass);
+    }
+  }
+}
+
+/** Wander a trail between two points, clearing trees (only trees) on the way. */
+function carveTrail(rng: Rng, map: TileMap, a: Vec2, b: Vec2): void {
+  let x = Math.round(a.x);
+  let y = Math.round(a.y);
+  const bx = Math.round(b.x);
+  const by = Math.round(b.y);
+  let guard = 0;
+  const clear = (cx: number, cy: number) => {
+    if (map.inBounds(cx, cy) && map.get(cx, cy) === Tile.Tree) map.set(cx, cy, Tile.Grass);
+  };
+  while ((x !== bx || y !== by) && guard++ < 1200) {
+    const dx = Math.sign(bx - x);
+    const dy = Math.sign(by - y);
+    if (dx !== 0 && (dy === 0 || rng.chance(0.5))) x += dx;
+    else if (dy !== 0) y += dy;
+    clear(x, y);
+    clear(x + 1, y);
+    clear(x, y + 1);
+  }
 }
 
 /** Repaint the biome layer in a disc (settlements tame the wilds around them). */

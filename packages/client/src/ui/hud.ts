@@ -260,6 +260,24 @@ export class Hud {
       }
     }
 
+    // Landmark markers: portals and villages are always shown — markers past
+    // the view clamp to the minimap edge, pointing the way like a compass.
+    if (state.overworld) {
+      const mark = (tx: number, ty: number, color: string, size: number) => {
+        let mx = (tx - ctx0) * px;
+        let my = (ty - cty0) * px;
+        const onMap = mx >= 0 && my >= 0 && mx <= this.minimap.width && my <= this.minimap.height;
+        mx = Math.max(3, Math.min(this.minimap.width - 3, mx));
+        my = Math.max(3, Math.min(this.minimap.height - 3, my));
+        ctx.globalAlpha = onMap ? 1 : 0.65;
+        ctx.fillStyle = color;
+        ctx.fillRect(mx - size / 2, my - size / 2, size, size);
+        ctx.globalAlpha = 1;
+      };
+      for (const v of state.overworld.villages) mark(v.cx, v.cy, '#d8b45a', 4);
+      for (const p of state.overworld.portals) mark(p.tx, p.ty, '#bb77ff', 5);
+    }
+
     // entities
     for (const e of state.entities.values()) {
       const l = e.latest;

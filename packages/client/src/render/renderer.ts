@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { dist, lerp } from '@webmagic/shared';
+import { Tile, dist, lerp, worldToTile } from '@webmagic/shared';
 import type { WorldState } from '../state';
 import type { Input } from '../input';
 import { LevelMesh } from './level';
@@ -31,6 +31,8 @@ export class GameRenderer {
   private starsMat: THREE.PointsMaterial;
   private level: LevelMesh | null = null;
   private torchFlames: THREE.Mesh[] = [];
+  /** Beacon beams over every overworld portal — visible from across the map. */
+  private portalBeams: THREE.Mesh[] = [];
   readonly sprites = new EntitySprites();
   readonly portalFx = new PortalFx();
   readonly fx: FxManager;
@@ -62,7 +64,9 @@ export class GameRenderer {
     // Filmic rolloff keeps torches/lanterns from blowing out nearby surfaces.
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
-    this.camera = new THREE.PerspectiveCamera(72, 1, 0.1, 220);
+    // Far plane reaches across the map so portal beacons are visible anywhere
+    // (terrain still fades into fog long before that).
+    this.camera = new THREE.PerspectiveCamera(72, 1, 0.1, 700);
     this.camera.rotation.order = 'YXZ';
 
     this.hemi = new THREE.HemisphereLight(0xbaccdd, 0x33281e, 1);
@@ -140,6 +144,12 @@ export class GameRenderer {
       (f.material as THREE.Material).dispose();
     }
     this.torchFlames = [];
+    for (const b of this.portalBeams) {
+      this.scene.remove(b);
+      b.geometry.dispose();
+      (b.material as THREE.Material).dispose();
+    }
+    this.portalBeams = [];
     this.sprites.clear();
     this.portalFx.clear();
     this.fx.clear();
@@ -148,6 +158,30 @@ export class GameRenderer {
     this.level = new LevelMesh();
     this.level.build(state.map, state.zone.kind, state.overworld?.props ?? []);
     this.scene.add(this.level.group);
+
+    // Beacon beams: a violet pillar of light over every portal, unaffected by
+    // fog, so the rifts can be spotted (and walked toward) from anywhere.
+    if (state.overworld) {
+      for (const p of state.overworld.portals) {
+        const px = (p.tx + 0.5) * 2;
+        const py = (p.ty + 0.5) * 2;
+        const geo = new THREE.CylinderGeometry(0.35, 1.0, 90, 8, 1, true);
+        const mat = new THREE.MeshBasicMaterial({
+          color: 0x9a5dff,
+          transparent: true,
+          opacity: 0.16,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          fog: false,
+        });
+        const beam = new THREE.Mesh(geo, mat);
+        beam.position.set(px, 45 + (state.map?.elevationAtWorld(px, py) ?? 0), py);
+        beam.frustumCulled = false;
+        this.scene.add(beam);
+        this.portalBeams.push(beam);
+      }
+    }
 
     const torches = state.overworld?.torches ?? state.dungeonFloor?.torches ?? [];
     this.lights.setTorches(torches);
@@ -220,7 +254,9 @@ export class GameRenderer {
     const shakePitch = shake * 0.05 * Math.sin(st * 71 + 4.1);
     const shakeRoll = shake * 0.09 * Math.sin(st * 55 + 2.7);
     const ground = state.map ? state.map.elevationAtWorld(state.x, state.y) : 0;
-    this.camera.position.set(state.x, EYE_HEIGHT + bob + camZ + this.landDip + ground, state.y);
+    // Wading: the camera settles chest-deep into water.
+    const wading = state.map && state.map.get(worldToTile(state.x), worldToTile(state.y)) === Tile.Water;
+    this.camera.position.set(state.x, EYE_HEIGHT + bob + camZ + this.landDip + ground - (wading ? 0.55 : 0), state.y);
     this.camera.rotation.y = input.yaw - Math.PI / 2 + shakeYaw;
     this.camera.rotation.x = input.pitch + this.pitchKick + shakePitch;
     this.camera.rotation.z = shakeRoll;
@@ -280,6 +316,12 @@ export class GameRenderer {
       y: state.y,
       on: true,
     });
+
+    // portal beacons breathe slowly
+    for (let i = 0; i < this.portalBeams.length; i++) {
+      const m = this.portalBeams[i].material as THREE.MeshBasicMaterial;
+      m.opacity = 0.13 + Math.sin(now * 0.0016 + i * 1.7) * 0.05;
+    }
 
     // torch flames billboard + flicker scale
     for (const f of this.torchFlames) {

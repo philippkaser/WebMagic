@@ -32,10 +32,21 @@ export enum Biome {
   Ashland = 4, // scorched barrens — dead trees, cinders
 }
 
-const BLOCKING = new Set<Tile>([Tile.Void, Tile.Tree, Tile.Water, Tile.Rock, Tile.Wall]);
+// Water is walkable: you wade in (slowly, visibly sunk) rather than bounce
+// off an invisible wall — ponds, marsh pools and rivers never block a route.
+const BLOCKING = new Set<Tile>([Tile.Void, Tile.Tree, Tile.Rock, Tile.Wall]);
 
 export function isBlocking(t: Tile): boolean {
   return BLOCKING.has(t);
+}
+
+/** Movement speed multiplier while wading. */
+export const WATER_SPEED_MUL = 0.55;
+
+/** Terrain speed factor at a world position (wading is slow). Client
+ *  prediction and the server both use this, so it must stay deterministic. */
+export function terrainSpeedMul(map: TileMap, x: number, y: number): number {
+  return map.get(Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE)) === Tile.Water ? WATER_SPEED_MUL : 1;
 }
 
 /** Tiles rendered as full-height wall cubes. */
