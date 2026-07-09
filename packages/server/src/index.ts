@@ -31,12 +31,29 @@ async function main() {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 16 * 1024 });
   wss.on('error', (err) => console.error('[net] wss error', err));
 
-  wss.on('connection', (ws) => {
+  // Heartbeat: without it, half-open connections (mobile clients dropping off
+  // wifi, crashed browsers) hold sessions and connection slots for minutes.
+  type LiveSocket = import('ws').WebSocket & { isAlive?: boolean };
+  const heartbeat = setInterval(() => {
+    for (const client of wss.clients as Set<LiveSocket>) {
+      if (client.isAlive === false) {
+        client.terminate();
+        continue;
+      }
+      client.isAlive = false;
+      client.ping();
+    }
+  }, 30_000);
+  wss.on('close', () => clearInterval(heartbeat));
+
+  wss.on('connection', (ws: import('ws').WebSocket & { isAlive?: boolean }) => {
     if (game.sessions.size >= CONFIG.maxConnections) {
       ws.close(1013, 'Server full');
       return;
     }
-    const session = new Session(ws, CONFIG.messageRateLimit);
+    ws.isAlive = true;
+    ws.on('pong', () => (ws.isAlive = true));
+    const session = new Session(ws, CONFIG.messageRateLimit, game.stats);
     game.addSession(session);
 
     ws.on('message', (data, isBinary) => {

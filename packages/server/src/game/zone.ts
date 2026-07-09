@@ -37,6 +37,8 @@ export class Zone {
   readonly entities = new Map<number, Entity>();
   readonly players = new Set<Player>();
   readonly torches: Vec2[];
+  /** Live projectiles only — keeps the per-tick flight pass off the full entity map. */
+  readonly projectiles = new Set<Entity>();
 
   private regenAcc = 0;
 
@@ -50,11 +52,13 @@ export class Zone {
   addEntity(e: Entity): void {
     this.entities.set(e.id, e);
     this.grid.insert(e);
+    if (e.kind === 'projectile') this.projectiles.add(e);
   }
 
   removeEntity(e: Entity): void {
     this.entities.delete(e.id);
     this.grid.remove(e);
+    if (e.kind === 'projectile') this.projectiles.delete(e);
   }
 
   /** Collision-resolved movement; keeps the spatial index in sync. */
@@ -74,8 +78,8 @@ export class Zone {
   }
 
   private tickProjectiles(host: ZoneHost, dt: number, now: number): void {
-    for (const e of [...this.entities.values()]) {
-      if (e.kind !== 'projectile') continue;
+    // Set iteration tolerates removal of the current element mid-loop.
+    for (const e of this.projectiles) {
       e.ttl! -= dt;
       if (e.ttl! <= 0) {
         this.detonate(host, e, null, now); // fizzle at max range still pops
@@ -143,7 +147,8 @@ export class Zone {
   }
 
   private tickLifetimes(now: number): void {
-    for (const e of [...this.entities.values()]) {
+    // Map iteration tolerates deletion of the current entry mid-loop.
+    for (const e of this.entities.values()) {
       if (e.despawnAt && now >= e.despawnAt) this.removeEntity(e);
     }
   }

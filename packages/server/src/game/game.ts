@@ -38,7 +38,7 @@ import {
 } from '@webmagic/shared';
 import { CONFIG } from '../config';
 import { Session } from '../net/session';
-import { Entity, snapshotEntity } from './entities';
+import { Entity, snapshotEntityCached } from './entities';
 import { Zone } from './zone';
 import { Player, PlayerRecord } from './player';
 import { WorldSim } from './worldsim';
@@ -47,16 +47,22 @@ import { tickAi, AiHost } from './ai';
 import { castSkill } from './combat';
 import { dropLoot, spawnMonster } from './spawn';
 import type { PlayerStore } from '../persist/store';
-import { hashPassphrase, verifyPassphrase } from '../auth';
+import { hashPassphraseAsync, verifyPassphraseAsync } from '../auth';
+import { ServerStats } from '../stats';
 
 export class GameServer implements AiHost {
   readonly sessions = new Set<Session>();
+  readonly stats = new ServerStats();
   private readonly store: PlayerStore;
 
   private overworld!: Zone;
   private worldSim!: WorldSim;
   private dungeons = new DungeonManager(CONFIG.worldSeed);
+  /** Every live zone by id — O(1) lookup on the per-message hot path. */
+  private zones = new Map<string, Zone>();
   private zoneMeta = new Map<string, Omit<ZoneMsg, 't' | 'x' | 'y'>>();
+  /** Players indexed by their entity id — O(1) on the combat hot path. */
+  private playersByEntity = new Map<number, Player>();
   private villages: VillageDef[] = [];
   private portalsById = new Map<number, PortalDef>();
 
@@ -80,6 +86,7 @@ export class GameServer implements AiHost {
     for (const p of world.portals) this.portalsById.set(p.id, p);
 
     this.overworld = new Zone('overworld', 'overworld', world.map, world.torches);
+    this.zones.set('overworld', this.overworld);
     this.zoneMeta.set('overworld', { zoneId: 'overworld', kind: 'overworld', seed: CONFIG.worldSeed });
 
     this.worldSim = new WorldSim(this.overworld, world, CONFIG.worldSeed, CONFIG.dayLengthMs);
@@ -87,13 +94,16 @@ export class GameServer implements AiHost {
 
     // A logic error in one tick must never take the server down.
     this.timer = setInterval(() => {
+      const start = performance.now();
       try {
         this.tick();
       } catch (err) {
         console.error('[game] tick error (survived):', err);
       }
+      this.stats.recordTick(performance.now() - start);
     }, TICK_MS);
     setInterval(() => void this.store.flush(), CONFIG.saveIntervalMs);
+    setInterval(() => console.log(this.statsLine(true)), 60_000);
     console.log(
       `[game] world ${world.map.w}x${world.map.h} ready — ` +
         `${world.villages.length} villages, ${world.camps.length} camps, ${world.portals.length} portals, ` +
@@ -109,13 +119,14 @@ export class GameServer implements AiHost {
     await this.store.flush();
   }
 
-  private activeZones(): Zone[] {
-    return [this.overworld, ...this.dungeons.allZones()];
+  private zoneById(id: string): Zone | null {
+    return this.zones.get(id) ?? null;
   }
 
-  private zoneById(id: string): Zone | null {
-    if (id === 'overworld') return this.overworld;
-    return this.dungeons.allZones().find((z) => z.id === id) ?? null;
+  private statsLine(reset = false): string {
+    let entities = 0;
+    for (const z of this.zones.values()) entities += z.entities.size;
+    return this.stats.report({ sessions: this.sessions.size, zones: this.zones.size, entities }, reset);
   }
 
   // ------------------------------------------------------------------ tick
@@ -131,15 +142,21 @@ export class GameServer implements AiHost {
       aggroMul: this.worldSim.monsterAggroMultiplier(now),
     };
     const dungeonClock = { time: 0.5, isNight: false, aggroMul: 1 };
-    for (const zone of this.activeZones()) {
+    for (const zone of this.zones.values()) {
       tickAi(this, zone, dt, zone.kind === 'overworld' ? clock : dungeonClock);
       zone.tick(this, dt);
       this.tickPlayers(zone, now);
     }
     this.worldSim.tick(this);
 
-    // Dispose empty dungeon instances.
-    if (this.tickCount % 40 === 0) this.dungeons.reap();
+    // Dispose empty dungeon instances (and drop their registry/meta entries,
+    // which would otherwise leak an entry per instance forever).
+    if (this.tickCount % 40 === 0) {
+      for (const zoneId of this.dungeons.reap()) {
+        this.zones.delete(zoneId);
+        this.zoneMeta.delete(zoneId);
+      }
+    }
 
     if (this.tickCount % SNAPSHOT_EVERY === 0) this.broadcastSnapshots(now);
   }
@@ -240,7 +257,7 @@ export class GameServer implements AiHost {
       for (const e of visible) {
         if (e.id === ent.id) continue;
         currentIds.add(e.id);
-        ents.push(snapshotEntity(e));
+        ents.push(snapshotEntityCached(e, this.tickCount));
       }
       const gone: number[] = [];
       for (const id of session.known) {
@@ -285,11 +302,10 @@ export class GameServer implements AiHost {
   }
 
   broadcastFx(zone: Zone, fx: FxMsg): void {
-    for (const session of this.sessions) {
-      const p = session.player;
-      if (!p || p.zoneId !== zone.id) continue;
+    // Zone-scoped fan-out: cost is players-in-zone, not total sessions.
+    for (const p of zone.players) {
       if (dist(p.entity.x, p.entity.y, fx.x, fx.y) > AOI_RADIUS + 10) continue;
-      session.send(fx);
+      p.session?.send(fx);
     }
   }
 
@@ -304,15 +320,11 @@ export class GameServer implements AiHost {
   }
 
   private sessionOf(player: Player): Session | null {
-    for (const s of this.sessions) if (s.player === player) return s;
-    return null;
+    return player.session;
   }
 
   playerByEntityId(id: number): Player | undefined {
-    for (const s of this.sessions) {
-      if (s.player?.entity.id === id) return s.player;
-    }
-    return undefined;
+    return this.playersByEntity.get(id);
   }
 
   private sendInventory(player: Player): void {
@@ -391,11 +403,9 @@ export class GameServer implements AiHost {
   }
 
   npcSay(zone: Zone, speaker: Entity, text: string): void {
-    for (const session of this.sessions) {
-      const p = session.player;
-      if (!p || p.zoneId !== zone.id) continue;
+    for (const p of zone.players) {
       if (dist(p.entity.x, p.entity.y, speaker.x, speaker.y) > CHAT_LOCAL_RADIUS) continue;
-      session.send({ t: 'chat', ch: 'local', from: speaker.name ?? 'Villager', text });
+      p.session?.send({ t: 'chat', ch: 'local', from: speaker.name ?? 'Villager', text });
     }
   }
 
@@ -417,6 +427,7 @@ export class GameServer implements AiHost {
   // ------------------------------------------------------------- messages
 
   handleMessage(session: Session, msg: ClientMessage): void {
+    this.stats.messagesIn++;
     if (msg.t === 'hello') {
       void this.handleHello(session, msg.name, msg.classId, msg.v, msg.pass);
       return;
@@ -497,11 +508,15 @@ export class GameServer implements AiHost {
       session.send({ t: 'reject', reason: 'Passphrase must be 4-64 characters.' });
       return;
     }
-    for (const s of this.sessions) {
-      if (s.player && s.player.name.toLowerCase() === name.toLowerCase()) {
-        session.send({ t: 'reject', reason: 'That hero is already in the world.' });
-        return;
+    const nameTaken = () => {
+      for (const s of this.sessions) {
+        if (s.player && s.player.name.toLowerCase() === name.toLowerCase()) return true;
       }
+      return false;
+    };
+    if (nameTaken()) {
+      session.send({ t: 'reject', reason: 'That hero is already in the world.' });
+      return;
     }
 
     let record = await this.store.load(name);
@@ -509,7 +524,7 @@ export class GameServer implements AiHost {
     if (record) {
       // Existing character. If it's protected, the passphrase must match.
       if (record.passHash) {
-        if (!verifyPassphrase(passphrase, record.passHash)) {
+        if (!(await verifyPassphraseAsync(passphrase, record.passHash))) {
           session.send({
             t: 'reject',
             reason: passphrase ? 'Wrong passphrase for that hero.' : 'That hero is protected — enter its passphrase.',
@@ -518,7 +533,7 @@ export class GameServer implements AiHost {
         }
       } else if (passphrase) {
         // Previously-open character: the first passphrase claims and protects it.
-        claimedPassHash = hashPassphrase(passphrase);
+        claimedPassHash = await hashPassphraseAsync(passphrase);
       }
     } else {
       const spawn = this.villages[0]?.innSpawn ?? { x: 20, y: 20 };
@@ -531,13 +546,23 @@ export class GameServer implements AiHost {
         equipment: {},
         x: spawn.x,
         y: spawn.y,
-        passHash: passphrase ? hashPassphrase(passphrase) : undefined,
+        passHash: passphrase ? await hashPassphraseAsync(passphrase) : undefined,
       };
+    }
+
+    // Re-check after the awaits above: a second hello for the same name may
+    // have logged in while we were hashing/loading, and two live Players for
+    // one record would clobber each other's saves.
+    if (session.player || nameTaken()) {
+      session.send({ t: 'reject', reason: 'That hero is already in the world.' });
+      return;
     }
 
     const player = new Player(record);
     if (claimedPassHash) player.passHash = claimedPassHash;
     session.player = player;
+    player.session = session;
+    this.playersByEntity.set(player.entity.id, player);
     // Characters that logged out inside a dungeon come back at the inn.
     if (this.overworld.map.blockedAtWorld(player.entity.x, player.entity.y)) {
       const spawn = this.villages[0]?.innSpawn ?? { x: 20, y: 20 };
@@ -627,11 +652,11 @@ export class GameServer implements AiHost {
       }
     } else {
       // local: same zone, within earshot
-      for (const s of this.sessions) {
-        const p = s.player;
-        if (!p || p.zoneId !== player.zoneId) continue;
+      const zone = this.zoneById(player.zoneId);
+      if (!zone) return;
+      for (const p of zone.players) {
         if (dist(p.entity.x, p.entity.y, player.entity.x, player.entity.y) > CHAT_LOCAL_RADIUS) continue;
-        s.send({ t: 'chat', ch: 'local', from: player.name, text });
+        p.session?.send({ t: 'chat', ch: 'local', from: player.name, text });
       }
     }
   }
@@ -673,8 +698,11 @@ export class GameServer implements AiHost {
         this.sendInventory(player);
         break;
       }
+      case 'stats':
+        this.notify(player, this.statsLine(), 'info');
+        break;
       default:
-        this.notify(player, 'Commands: /goto portal|village [i], /xp <amount>', 'info');
+        this.notify(player, 'Commands: /goto portal|village [i], /xp <amount>, /stats', 'info');
     }
   }
 
@@ -766,6 +794,11 @@ export class GameServer implements AiHost {
 
   // -------------------------------------------------------------- dungeons
 
+  private registerZone(zone: Zone, meta: Omit<ZoneMsg, 't' | 'x' | 'y'>): void {
+    this.zones.set(zone.id, zone);
+    this.zoneMeta.set(zone.id, meta);
+  }
+
   private moveToZone(player: Player, zone: Zone, x: number, y: number): void {
     const from = this.zoneById(player.zoneId);
     if (from) {
@@ -782,7 +815,7 @@ export class GameServer implements AiHost {
 
     if (!this.zoneMeta.has(zone.id)) {
       // dungeon zone meta is registered on floor creation; this is a safety net
-      this.zoneMeta.set(zone.id, { zoneId: zone.id, kind: zone.kind, seed: 0 });
+      this.registerZone(zone, { zoneId: zone.id, kind: zone.kind, seed: 0 });
     }
   }
 
@@ -791,7 +824,7 @@ export class GameServer implements AiHost {
     if (!portal) return;
     const inst = this.dungeons.enter(portal);
     const { zone, data } = inst.getFloor(0, this.now());
-    this.zoneMeta.set(zone.id, {
+    this.registerZone(zone, {
       zoneId: zone.id,
       kind: 'dungeon',
       seed: inst.seed,
@@ -812,7 +845,7 @@ export class GameServer implements AiHost {
     run.floor++;
     run.floorsDone++;
     const { zone, data } = inst.getFloor(run.floor, now);
-    this.zoneMeta.set(zone.id, {
+    this.registerZone(zone, {
       zoneId: zone.id,
       kind: 'dungeon',
       seed: inst.seed,
@@ -888,6 +921,8 @@ export class GameServer implements AiHost {
     const player = session.player;
     if (!player) return;
     session.player = null;
+    player.session = null;
+    this.playersByEntity.delete(player.entity.id);
 
     const zone = this.zoneById(player.zoneId);
     if (zone) {

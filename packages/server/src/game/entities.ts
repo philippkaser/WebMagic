@@ -124,6 +124,18 @@ export interface Entity {
 
   /** Spatial grid bookkeeping — do not touch. */
   _cell?: number;
+  /** Snapshot cache: entities are encoded once per replication round and the
+   *  result shared across every viewer (crowds would otherwise cost O(k²)). */
+  _snap?: EntitySnapshot;
+  _snapTick?: number;
+}
+
+/** Cached per-tick snapshot — encode once, share across all viewers. */
+export function snapshotEntityCached(e: Entity, tick: number): EntitySnapshot {
+  if (e._snapTick === tick && e._snap) return e._snap;
+  e._snap = snapshotEntity(e);
+  e._snapTick = tick;
+  return e._snap;
 }
 
 export function snapshotEntity(e: Entity): EntitySnapshot {

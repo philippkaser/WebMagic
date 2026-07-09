@@ -406,9 +406,13 @@ export class WorldSim {
     // pick a camp that still has monsters, raid its nearest village
     const camps = this.rng.shuffle([...this.world.camps]);
     for (const camp of camps) {
-      const raiders = [...this.zone.entities.values()]
-        .filter((m) => m.kind === 'monster' && m.campId === camp.id && !m.dead && m.ai)
-        .slice(0, 3);
+      const raiders: Entity[] = [];
+      for (const m of this.zone.entities.values()) {
+        if (m.kind === 'monster' && m.campId === camp.id && !m.dead && m.ai) {
+          raiders.push(m);
+          if (raiders.length >= 3) break;
+        }
+      }
       if (raiders.length < 2) continue;
 
       const campC = tileCenter(camp.cx, camp.cy);
@@ -466,8 +470,8 @@ export class WorldSim {
     if (!this.caravans.has(caravan.id)) return;
     this.caravans.delete(caravan.id);
     this.zone.removeEntity(caravan);
-    // Dismiss the escort.
-    for (const e of [...this.zone.entities.values()]) {
+    // Dismiss the escort (deleting the current entry mid-iteration is safe).
+    for (const e of this.zone.entities.values()) {
       if (e.variant === 'caravan-guard' && e.ai?.escortId === caravan.id) this.zone.removeEntity(e);
     }
     const name = caravan.name ?? 'A caravan';

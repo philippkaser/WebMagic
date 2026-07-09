@@ -66,7 +66,9 @@ const GUARD_LEASH = 24;
  */
 export function tickAi(host: AiHost, zone: Zone, dt: number, clock: WorldClock): void {
   const now = host.now();
-  for (const e of [...zone.entities.values()]) {
+  // Iterate the map directly (no per-tick copy). Removals mid-loop are safe;
+  // entities spawned mid-loop may be visited this same tick, which is harmless.
+  for (const e of zone.entities.values()) {
     if (!e.ai || e.dead) continue;
     if (e.stunUntil && now < e.stunUntil) {
       e.anim = 'idle';

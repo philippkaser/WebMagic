@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { PlayerRecord } from '../game/player';
 
@@ -51,6 +51,10 @@ export class JsonFileStore implements PlayerStore {
     if (!this.dirty) return;
     this.dirty = false;
     const arr = [...this.records.values()];
-    await writeFile(this.file, JSON.stringify(arr, null, 2), 'utf8');
+    // Atomic write: a crash mid-write must never corrupt the only copy of
+    // every character. Write to a temp file, then rename over the original.
+    const tmp = `${this.file}.tmp`;
+    await writeFile(tmp, JSON.stringify(arr, null, 2), 'utf8');
+    await rename(tmp, this.file);
   }
 }

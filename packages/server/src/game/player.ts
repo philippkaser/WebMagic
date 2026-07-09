@@ -21,6 +21,7 @@ import {
   PassiveId,
 } from '@webmagic/shared';
 import { Entity, allocEntityId } from './entities';
+import type { Session } from '../net/session';
 
 /** The persisted shape of a character (see persist/store.ts). */
 export interface PlayerRecord {
@@ -47,6 +48,8 @@ export class Player {
   readonly entity: Entity;
   readonly name: string;
   readonly classId: ClassId;
+  /** The live connection carrying this player; null after disconnect. */
+  session: Session | null = null;
   /** scrypt `salt:hash` of the account passphrase; undefined = open name. */
   passHash?: string;
 

@@ -1,6 +1,7 @@
 import type { WebSocket } from 'ws';
 import { ServerMessage, encode } from '@webmagic/shared';
 import type { Player } from '../game/player';
+import type { ServerStats } from '../stats';
 
 let nextSessionId = 1;
 
@@ -26,10 +27,13 @@ export class Session {
   private chatTokens = 3;
   private lastChatRefill = Date.now();
 
-  constructor(ws: WebSocket, ratePerSec: number) {
+  private readonly stats?: ServerStats;
+
+  constructor(ws: WebSocket, ratePerSec: number, stats?: ServerStats) {
     this.ws = ws;
     this.ratePerSec = ratePerSec;
     this.tokens = ratePerSec;
+    this.stats = stats;
   }
 
   /** @returns false if the client is over its message budget. */
@@ -53,7 +57,9 @@ export class Session {
 
   send(msg: ServerMessage): void {
     if (this.ws.readyState === this.ws.OPEN) {
-      this.ws.send(encode(msg));
+      const data = encode(msg);
+      if (this.stats) this.stats.bytesOut += data.length;
+      this.ws.send(data);
     }
   }
 }
