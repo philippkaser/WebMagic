@@ -52,6 +52,7 @@ export const GUARD_COMBAT: MonsterDef = {
   aggroRange: 12,
   attackRange: 1.8,
   attackCooldownMs: 1200,
+  windupMs: 340,
   xp: 0,
   lootChance: 0,
   habitat: 'overworld',
@@ -107,6 +108,9 @@ export function tickAi(host: AiHost, zone: Zone, dt: number, clock: WorldClock):
     if (!ai || e.dead) continue;
     if (e.stunUntil && now < e.stunUntil) {
       e.anim = 'idle';
+      // A stagger interrupts whatever attack was being wound up.
+      e.windupUntil = undefined;
+      e.windupTargetId = undefined;
       continue;
     }
 
@@ -246,11 +250,39 @@ function tickCritter(zone: Zone, e: Entity, dt: number, now: number): void {
   wanderOrIdle(zone, e, dt, now);
 }
 
+/**
+ * Commit to an attack: the wind-up. The blow itself lands in resolveWindup
+ * after def.windupMs — a telegraphed beat the target can dodge, and a window
+ * in which a stagger cancels the attack outright.
+ */
 function tryAttack(host: AiHost, zone: Zone, e: Entity, target: Entity, def: MonsterDef, now: number): void {
-  if (now < (e.attackCooldownUntil ?? 0)) return;
-  e.attackCooldownUntil = now + def.attackCooldownMs;
+  if (now < (e.attackCooldownUntil ?? 0) || e.windupUntil) return;
+  const windup = def.windupMs ?? 400;
+  e.windupUntil = now + windup;
+  e.windupTargetId = target.id;
   e.facing = Math.atan2(target.y - e.y, target.x - e.x);
   e.anim = 'attack';
+  host.broadcastFx(zone, { t: 'fx', kind: 'windup', x: e.x, y: e.y, entId: e.id, amount: windup });
+}
+
+/**
+ * Advance an in-flight wind-up. Returns true while the entity is committed
+ * to its attack (callers hold position and skip other behavior).
+ */
+function resolveWindup(host: AiHost, zone: Zone, e: Entity, def: MonsterDef, now: number): boolean {
+  if (!e.windupUntil) return false;
+  if (now < e.windupUntil) {
+    e.anim = 'attack'; // hold the telegraph pose
+    return true;
+  }
+  e.windupUntil = undefined;
+  e.attackCooldownUntil = now + def.attackCooldownMs;
+  const target = e.windupTargetId ? zone.entities.get(e.windupTargetId) : undefined;
+  e.windupTargetId = undefined;
+  if (!target || target.dead) return false;
+  const d = dist(e.x, e.y, target.x, target.y);
+  if (d > def.attackRange * 1.4 + 0.4) return false; // sidestepped — the blow whiffs
+  e.facing = Math.atan2(target.y - e.y, target.x - e.x);
   if (def.projectile) {
     spawnProjectile(zone, e, e.facing, {
       speed: def.projectile.speed,
@@ -262,7 +294,9 @@ function tryAttack(host: AiHost, zone: Zone, e: Entity, target: Entity, def: Mon
     });
   } else {
     zone.applyDamage(host, target, def.damage, e, now);
+    if (!target.dead) zone.impulse(target, e.x, e.y, 2.8); // the hit has weight
   }
+  return false;
 }
 
 function wanderOrIdle(zone: Zone, e: Entity, dt: number, now: number): void {
@@ -298,13 +332,17 @@ function validateTarget(zone: Zone, e: Entity, leash: number): Entity | null {
 function tickMonster(host: AiHost, zone: Zone, e: Entity, dt: number, now: number, clock: WorldClock): void {
   const ai = e.ai!;
   const def = e.monsterDef!;
-  let target = validateTarget(zone, e, ai.roamUntil ? MONSTER_LEASH * 1.6 : MONSTER_LEASH);
 
   // Hunger climbs while the belly is empty (predators only). Feeding — a
   // kill — resets it in GameServer.onEntityKilled.
   if (ai.drives) {
     ai.drives.hunger = Math.min(1, ai.drives.hunger + dt * HUNGER_PER_SEC);
   }
+
+  // Committed to an attack? Hold the telegraph until it lands (or whiffs).
+  if (resolveWindup(host, zone, e, def, now)) return;
+
+  let target = validateTarget(zone, e, ai.roamUntil ? MONSTER_LEASH * 1.6 : MONSTER_LEASH);
 
   // Daily rhythm (overworld camps only): doze near the fire by day, prowl
   // wide at night. Nocturnal hunters barely react while the sun is up —
@@ -339,8 +377,8 @@ function tickMonster(host: AiHost, zone: Zone, e: Entity, dt: number, now: numbe
     const d = dist(e.x, e.y, target.x, target.y);
     if (d <= def.attackRange) {
       e.facing = Math.atan2(target.y - e.y, target.x - e.x);
-      if (e.anim !== 'attack' || now >= (e.attackCooldownUntil ?? 0)) e.anim = 'idle';
-      tryAttack(host, zone, e, target, def, now);
+      e.anim = 'idle';
+      tryAttack(host, zone, e, target, def, now); // sets 'attack' when it commits
     } else {
       moveToward(zone, e, target.x, target.y, dt, now);
     }
@@ -357,6 +395,7 @@ function tickMonster(host: AiHost, zone: Zone, e: Entity, dt: number, now: numbe
 
 function tickGuard(host: AiHost, zone: Zone, e: Entity, dt: number, now: number, clock: WorldClock): void {
   const ai = e.ai!;
+  if (resolveWindup(host, zone, e, GUARD_COMBAT, now)) return;
   let target = validateTarget(zone, e, GUARD_LEASH);
   if (!target && now >= ai.nextThink) {
     ai.nextThink = now + 300 + Math.random() * 300;
@@ -499,6 +538,7 @@ function tickCaravan(host: AiHost, zone: Zone, e: Entity, dt: number, now: numbe
 
 function tickCaravanGuard(host: AiHost, zone: Zone, e: Entity, dt: number, now: number): void {
   const ai = e.ai!;
+  if (resolveWindup(host, zone, e, GUARD_COMBAT, now)) return;
   const leader = ai.escortId ? zone.entities.get(ai.escortId) : undefined;
 
   // Fight anything threatening the caravan.

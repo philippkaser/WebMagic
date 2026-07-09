@@ -275,6 +275,16 @@ function startGame(
       case 'feathers':
         renderer.fx.feathers(msg.x, msg.y, msg.color);
         break;
+      case 'windup':
+        // an attack being wound up nearby — amber flare on the attacker
+        if (msg.entId) renderer.sprites.telegraph(msg.entId, now, msg.amount ?? 400);
+        break;
+      case 'swing': {
+        renderer.fx.swingArc(msg.x, msg.y, msg.dir ?? 0, msg.amount ?? 2, msg.color ?? 0xffe6b0);
+        // your own swing carries a little kick
+        if (msg.entId === selfEntityId) renderer.addTrauma(0.06);
+        break;
+      }
     }
   }
 

@@ -76,6 +76,36 @@ export class FxManager {
     this.rings.push({ mesh, mat, ttl: 0.45, maxTtl: 0.45, targetRadius: radius });
   }
 
+  /**
+   * A melee swing: a bright arc sector snapped in the aim direction at chest
+   * height, expanding slightly and gone in a blink — the visual weight of the
+   * blow, visible to attacker and bystanders alike.
+   */
+  swingArc(x: number, z: number, dir: number, range: number, color: number): void {
+    const arcLen = Math.PI * 0.7;
+    // RingGeometry lies in XY; after rotation.x = -PI/2 a geometry angle θ
+    // lands at world yaw -θ, hence the negated start angle.
+    const geo = new THREE.RingGeometry(range * 0.45, range * 0.8, 18, 1, -dir - arcLen / 2, arcLen);
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 1.15, z);
+    this.scene.add(mesh);
+    this.rings.push({ mesh, mat, ttl: 0.16, maxTtl: 0.16, targetRadius: 0.25 });
+    // sparks flung along the swing
+    this.spawnBurst(
+      x + Math.cos(dir) * range * 0.6, 1.0, z + Math.sin(dir) * range * 0.6,
+      5, color, { speed: 4, size: 0.16, ttl: 0.3, gravity: 6, drag: 2.5 }
+    );
+  }
+
   /** Fireball detonation: an additive shockwave sphere + ground ring + embers. */
   explosion(x: number, z: number, color: number, radius: number): void {
     const geo = new THREE.SphereGeometry(0.5, 12, 8);

@@ -122,6 +122,15 @@ export interface Entity {
   stunUntil?: number;
   /** Damage credit for XP: last player who hit this entity. */
   lastHitBy?: number;
+  /** Attack wind-up in progress: the blow lands when this passes (telegraph).
+   *  A stagger during the wind-up cancels the attack. */
+  windupUntil?: number;
+  windupTargetId?: number;
+  /** Knockback impulse (m/s), decayed by the zone each tick. */
+  kx?: number;
+  ky?: number;
+  /** Big hits stagger, but not more often than once per second. */
+  lastStaggerAt?: number;
 
   // monsters / npcs
   ai?: AiState;

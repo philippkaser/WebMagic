@@ -39,6 +39,8 @@ export class Zone {
   readonly torches: Vec2[];
   /** Live projectiles only — keeps the per-tick flight pass off the full entity map. */
   readonly projectiles = new Set<Entity>();
+  /** Entities currently being shoved by a knockback impulse. */
+  private readonly impulsed = new Set<Entity>();
 
   private regenAcc = 0;
 
@@ -73,8 +75,48 @@ export class Zone {
   tick(host: ZoneHost, dt: number): void {
     const now = host.now();
     this.tickProjectiles(host, dt, now);
+    this.tickImpulses(dt);
     this.tickLifetimes(now);
     this.tickRegen(dt);
+  }
+
+  /**
+   * Shove an entity away from a point — the physical weight behind a hit.
+   * Impulses decay fast; collision applies, so nothing is punched through walls.
+   */
+  impulse(target: Entity, fromX: number, fromY: number, strength: number): void {
+    if (target.dead || target.speed === 0) return; // fixtures don't budge
+    const dx = target.x - fromX;
+    const dy = target.y - fromY;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    let kx = (target.kx ?? 0) + (dx / d) * strength;
+    let ky = (target.ky ?? 0) + (dy / d) * strength;
+    const mag = Math.sqrt(kx * kx + ky * ky);
+    if (mag > 12) {
+      kx = (kx / mag) * 12;
+      ky = (ky / mag) * 12;
+    }
+    target.kx = kx;
+    target.ky = ky;
+    this.impulsed.add(target);
+  }
+
+  private tickImpulses(dt: number): void {
+    for (const e of this.impulsed) {
+      if (e.dead || !this.entities.has(e.id)) {
+        this.impulsed.delete(e);
+        continue;
+      }
+      this.moveEntity(e, e.kx! * dt, e.ky! * dt);
+      const decay = Math.max(0, 1 - dt * 7);
+      e.kx! *= decay;
+      e.ky! *= decay;
+      if (e.kx! * e.kx! + e.ky! * e.ky! < 0.05) {
+        e.kx = 0;
+        e.ky = 0;
+        this.impulsed.delete(e);
+      }
+    }
   }
 
   private tickProjectiles(host: ZoneHost, dt: number, now: number): void {
@@ -124,6 +166,8 @@ export class Zone {
       if (directTarget) {
         this.applyDamage(host, directTarget, damage, owner, now);
         if (e.slowMs && !directTarget.dead) directTarget.slowUntil = now + e.slowMs;
+        // The bolt's momentum carries into the target.
+        if (!directTarget.dead) this.impulse(directTarget, e.x - e.vx!, e.y - e.vy!, 2.5);
       }
       return;
     }
@@ -143,6 +187,8 @@ export class Zone {
       const dmg = target === directTarget ? damage : Math.max(1, Math.round(damage * 0.7));
       this.applyDamage(host, target, dmg, owner, now);
       if (e.slowMs && !target.dead) target.slowUntil = now + e.slowMs;
+      // The blast wave throws everything caught in it outward.
+      if (!target.dead) this.impulse(target, e.x, e.y, 7);
     }
   }
 
@@ -204,10 +250,23 @@ export class Zone {
       target.dead = true;
       target.anim = 'dead';
       host.onEntityKilled(this, target, source);
-    } else if (target.ai && source && !target.ai.targetId && target.kind === 'monster') {
-      // getting hit wakes monsters up
-      target.ai.mode = 'chase';
-      target.ai.targetId = source.id;
+    } else {
+      // Heavy hits stagger monsters — a beat of hit-stop that also cancels
+      // any attack they were winding up. Rate-limited so fast weapons can't
+      // stunlock a boss.
+      if (
+        target.kind === 'monster' &&
+        dmg > target.maxHp * 0.18 &&
+        now > (target.lastStaggerAt ?? 0) + 1000
+      ) {
+        target.lastStaggerAt = now;
+        target.stunUntil = Math.max(target.stunUntil ?? 0, now + 160);
+      }
+      if (target.ai && source && !target.ai.targetId && target.kind === 'monster') {
+        // getting hit wakes monsters up
+        target.ai.mode = 'chase';
+        target.ai.targetId = source.id;
+      }
     }
   }
 

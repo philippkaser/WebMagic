@@ -213,13 +213,20 @@ export interface ChatBroadcastMsg {
 /** Transient effects: floating damage numbers, level-ups, deaths, pickups… */
 export interface FxMsg {
   t: 'fx';
-  kind: 'hit' | 'crit' | 'heal' | 'death' | 'levelup' | 'pickup' | 'nova' | 'explosion' | 'feathers';
+  kind:
+    | 'hit' | 'crit' | 'heal' | 'death' | 'levelup' | 'pickup' | 'nova' | 'explosion' | 'feathers'
+    /** An attack being wound up — the telegraph before the blow (amount = windup ms). */
+    | 'windup'
+    /** A melee swing arc (dir = aim angle, amount = range). */
+    | 'swing';
   x: number;
   y: number;
   entId?: number;
   amount?: number;
   color?: number;
   text?: string;
+  /** Direction in radians (swing arcs). */
+  dir?: number;
 }
 
 export interface NoticeMsg {

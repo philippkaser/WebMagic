@@ -9,6 +9,8 @@ interface SpriteInstance {
   variant: string;
   h: number;
   flashUntil: number;
+  /** Attack telegraph: amber tint + a swelling pulse while winding up. */
+  telegraphUntil: number;
   views?: SpriteDef['views'];
   curView?: string;
 }
@@ -50,7 +52,7 @@ export class EntitySprites {
           : new THREE.MeshLambertMaterial({ map: def.texture, alphaTest: 0.5, side: THREE.DoubleSide });
         const mesh = new THREE.Mesh(geo, mat);
         this.group.add(mesh);
-        inst = { mesh, mat, variant: key, h: def.h, flashUntil: 0, views: def.views };
+        inst = { mesh, mat, variant: key, h: def.h, flashUntil: 0, telegraphUntil: 0, views: def.views };
         this.instances.set(id, inst);
       }
 
@@ -88,15 +90,20 @@ export class EntitySprites {
       if (dead) {
         inst.mesh.rotation.x = -Math.PI / 2.2;
         setTint(inst, 0x555555);
+        inst.mesh.scale.y = 1;
       } else {
         inst.mesh.rotation.x = 0;
         if (inst.flashUntil > now) {
           setTint(inst, 0xff6655);
+        } else if (inst.telegraphUntil > now) {
+          // wind-up telegraph: amber flare + a rearing pulse you can react to
+          setTint(inst, 0xffa030);
         } else if (e.latest.a === 'attack') {
           setTint(inst, 0xffddaa);
         } else {
           setTint(inst, 0xffffff);
         }
+        inst.mesh.scale.y = inst.telegraphUntil > now ? 1 + Math.sin(now * 0.03) * 0.05 + 0.05 : 1;
       }
     }
 
@@ -109,6 +116,12 @@ export class EntitySprites {
   flash(id: number, now: number): void {
     const inst = this.instances.get(id);
     if (inst) inst.flashUntil = now + 130;
+  }
+
+  /** Amber wind-up telegraph for the given duration (an incoming attack). */
+  telegraph(id: number, now: number, durMs: number): void {
+    const inst = this.instances.get(id);
+    if (inst) inst.telegraphUntil = now + durMs;
   }
 
   private removeInstance(id: number): void {

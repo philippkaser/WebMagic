@@ -84,6 +84,11 @@ export function castSkill(
 
   switch (def.kind) {
     case 'melee': {
+      // Everyone nearby sees the swing arc — combat reads even as a bystander.
+      host.broadcastFx(zone, {
+        t: 'fx', kind: 'swing', x: ent.x, y: ent.y, entId: ent.id,
+        dir: aim, amount: def.range, color: crit ? 0xffb84a : 0xffe6b0,
+      });
       const targets = zone.grid
         .query(ent.x, ent.y, def.range + 0.5)
         .filter((e) => hostileTo(ent.faction, e))
@@ -91,6 +96,8 @@ export function castSkill(
       for (const t of targets) {
         zone.applyDamage(host, t, power, ent, now);
         if (def.stunMs && !t.dead) t.stunUntil = now + def.stunMs;
+        // Melee hits shove — crits send them flying.
+        if (!t.dead) zone.impulse(t, ent.x, ent.y, crit ? 7.5 : 4.5);
       }
       break;
     }
@@ -112,6 +119,7 @@ export function castSkill(
       for (const t of targets) {
         zone.applyDamage(host, t, power, ent, now);
         if (def.slowMs && !t.dead) t.slowUntil = now + def.slowMs;
+        if (!t.dead) zone.impulse(t, ent.x, ent.y, 5); // the shockwave pushes outward
       }
       break;
     }

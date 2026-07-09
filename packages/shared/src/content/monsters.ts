@@ -20,6 +20,9 @@ export interface MonsterDef {
   aggroRange: number;
   attackRange: number;
   attackCooldownMs: number;
+  /** Attack wind-up: the telegraphed pause between committing and connecting.
+   *  Heavier monsters take longer — that beat is what you dodge. */
+  windupMs?: number;
   xp: number;
   /** Chance to drop a generated item on death (0..1). */
   lootChance: number;
@@ -48,6 +51,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     aggroRange: 9,
     attackRange: 1.6,
     attackCooldownMs: 1300,
+    windupMs: 320,
     xp: 12,
     lootChance: 0.25,
     habitat: 'overworld',
@@ -63,6 +67,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     aggroRange: 11,
     attackRange: 1.5,
     attackCooldownMs: 1100,
+    windupMs: 260,
     xp: 18,
     lootChance: 0.2,
     habitat: 'overworld',
@@ -80,6 +85,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     aggroRange: 10,
     attackRange: 1.8,
     attackCooldownMs: 1600,
+    windupMs: 550,
     xp: 35,
     lootChance: 0.35,
     habitat: 'overworld',
@@ -95,6 +101,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     aggroRange: 10,
     attackRange: 1.6,
     attackCooldownMs: 1400,
+    windupMs: 380,
     xp: 25,
     lootChance: 0.3,
     habitat: 'dungeon',
@@ -110,6 +117,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     aggroRange: 12,
     attackRange: 9,
     attackCooldownMs: 2200,
+    windupMs: 450,
     xp: 30,
     lootChance: 0.3,
     projectile: { speed: 12, lightColor: 0xff4422, aoeRadius: 1.6 },
@@ -126,6 +134,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     aggroRange: 10,
     attackRange: 2.2,
     attackCooldownMs: 2000,
+    windupMs: 700,
     xp: 110,
     lootChance: 0.9,
     habitat: 'dungeon',
@@ -141,6 +150,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     aggroRange: 8,
     attackRange: 1.6,
     attackCooldownMs: 1500,
+    windupMs: 420,
     xp: 22,
     lootChance: 0.2,
     habitat: 'dungeon',
@@ -158,6 +168,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     aggroRange: 9,
     attackRange: 1.3,
     attackCooldownMs: 1200,
+    windupMs: 300,
     xp: 8,
     lootChance: 0.05,
     habitat: 'dungeon',
@@ -173,6 +184,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     aggroRange: 13,
     attackRange: 1.4,
     attackCooldownMs: 900,
+    windupMs: 240,
     xp: 20,
     lootChance: 0.18,
     habitat: 'dungeon',

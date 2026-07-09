@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Server simulation rate. */
 export const TICK_MS = 50; // 20 Hz

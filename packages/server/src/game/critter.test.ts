@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { FxMsg, MONSTERS, Tile, TileMap, dist } from '@webmagic/shared';
 import { Zone, ZoneHost } from './zone';
 import { AiHost, tickAi, WorldClock } from './ai';
-import { spawnCritter, spawnMonster } from './spawn';
+import { spawnCritter, spawnMonster, spawnNpc } from './spawn';
 import type { Entity } from './entities';
 
 /** A host that records deaths and advances a simulated clock with each tick. */
@@ -74,6 +74,20 @@ test('hunger accumulates over time while a predator prowls', () => {
   const host = makeHost();
   step(host, zone, 30, 600);
   assert.ok(wolf.ai!.drives!.hunger > 0.5, 'an empty belly gets emptier');
+});
+
+test('attacks are wound up: the blow lands after the telegraph, not instantly', () => {
+  const zone = new Zone('t:windup', 'overworld', new TileMap(16, 16, Tile.Grass), []);
+  const goblin = spawnMonster(zone, MONSTERS.goblin, 10, 10);
+  spawnNpc(zone, 'guard', 11.2, 10, { name: 'Testguard' }); // adjacent, hostile to monsters
+
+  const host = makeHost();
+  // 200ms in: the guard has committed to a swing (340ms wind-up) but nothing landed.
+  step(host, zone, 0.2, 12);
+  assert.equal(goblin.hp, goblin.maxHp, 'no damage during the wind-up');
+  // By 900ms the telegraphed blow has connected.
+  step(host, zone, 0.7, 42);
+  assert.ok(goblin.hp < goblin.maxHp, 'the blow lands once the wind-up completes');
 });
 
 test('a deer bolts away from an approaching wolf', () => {
