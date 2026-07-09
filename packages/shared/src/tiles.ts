@@ -19,6 +19,19 @@ export enum Tile {
   Spikes = 11, // dungeon trap: hurts grounded players (jump over to cross safely)
 }
 
+/**
+ * Regional character of the overworld. Biomes drive ground art, feature
+ * density, creature habitats and region naming — a tile keeps its Tile type
+ * (grass is walkable everywhere) while the biome says *which* wilds these are.
+ */
+export enum Biome {
+  Meadow = 0, // open grassland — villages, roads, farmland
+  Forest = 1, // deep dark woods — dense pines, wolves, deer
+  Marsh = 2, // sodden fen — pools, mist, sickly reeds
+  Highland = 3, // windswept rocky heights
+  Ashland = 4, // scorched barrens — dead trees, cinders
+}
+
 const BLOCKING = new Set<Tile>([Tile.Void, Tile.Tree, Tile.Water, Tile.Rock, Tile.Wall]);
 
 export function isBlocking(t: Tile): boolean {
@@ -36,12 +49,28 @@ export class TileMap {
   readonly tiles: Uint8Array;
   /** Per-tile terrain elevation, in height levels (see HEIGHT_STEP). */
   readonly heights: Uint8Array;
+  /** Per-tile biome (see Biome). Dungeons leave this all-Meadow; unused there. */
+  readonly biomes: Uint8Array;
 
   constructor(w: number, h: number, fill: Tile = Tile.Void) {
     this.w = w;
     this.h = h;
     this.tiles = new Uint8Array(w * h).fill(fill);
     this.heights = new Uint8Array(w * h);
+    this.biomes = new Uint8Array(w * h);
+  }
+
+  biomeAt(tx: number, ty: number): Biome {
+    if (!this.inBounds(tx, ty)) return Biome.Meadow;
+    return this.biomes[ty * this.w + tx] as Biome;
+  }
+
+  setBiome(tx: number, ty: number, b: Biome): void {
+    if (this.inBounds(tx, ty)) this.biomes[ty * this.w + tx] = b;
+  }
+
+  biomeAtWorld(x: number, y: number): Biome {
+    return this.biomeAt(Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE));
   }
 
   heightLevel(tx: number, ty: number): number {

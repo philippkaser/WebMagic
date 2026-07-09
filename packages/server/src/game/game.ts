@@ -109,6 +109,15 @@ export class GameServer implements AiHost {
         `${world.villages.length} villages, ${world.camps.length} camps, ${world.portals.length} portals, ` +
         `${this.overworld.entities.size} entities`
     );
+    const regionsByKind = new Map<string, string[]>();
+    for (const r of world.regions) {
+      let names = regionsByKind.get(r.kind);
+      if (!names) regionsByKind.set(r.kind, (names = []));
+      names.push(r.name);
+    }
+    for (const [kind, names] of regionsByKind) {
+      console.log(`[game]   ${kind}s: ${names.join(', ')}`);
+    }
   }
 
   async stop(): Promise<void> {

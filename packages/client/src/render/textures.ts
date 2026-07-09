@@ -484,6 +484,91 @@ function generateTilePBR(name: string): PbrMaps {
         2.2
       );
     }
+    case 'forest-floor': {
+      // Deep-woods ground: dark moss and needle litter, pale roots poking through.
+      const moss = makeValueNoise(0x6f01, 16);
+      const litter = makeValueNoise(0x6f02, 64);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const m = moss((px / S) * 16, (py / S) * 16);
+          const l = litter((px / S) * 64, (py / S) * 64);
+          const root = l > 0.87 ? 1 : 0;
+          return {
+            h: l * 0.5 + m * 0.3 + root * 0.2,
+            r: mix(28, 44, m) + root * 26,
+            g: mix(46, 74, m) + root * 20,
+            b: mix(20, 32, m) + root * 10,
+            rough: 0.95,
+          };
+        },
+        2.2
+      );
+    }
+    case 'marsh-floor': {
+      // Sodden fen mud: sickly green-brown, glossy where water stands.
+      const mud = makeValueNoise(0x3a01, 24);
+      const wet = makeValueNoise(0x3a02, 12);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const m = mud((px / S) * 24, (py / S) * 24);
+          const w = wet((px / S) * 12, (py / S) * 12);
+          const puddle = w > 0.62;
+          return {
+            h: puddle ? 0.15 : 0.3 + m * 0.5,
+            r: puddle ? 34 : mix(52, 74, m),
+            g: puddle ? 48 : mix(58, 82, m),
+            b: puddle ? 44 : mix(34, 46, m),
+            rough: puddle ? 0.25 : 0.9,
+          };
+        },
+        2.0
+      );
+    }
+    case 'highland-floor': {
+      // Windswept heights: thin sun-bleached grass over grey stone.
+      const stone = makeValueNoise(0x4b01, 32);
+      const tuft = makeValueNoise(0x4b02, 64);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const s = stone((px / S) * 32, (py / S) * 32);
+          const t = tuft((px / S) * 64, (py / S) * 64);
+          const bare = s > 0.58; // exposed rock patches
+          return {
+            h: bare ? 0.55 + s * 0.3 : 0.3 + t * 0.35,
+            r: bare ? mix(92, 116, s) : mix(72, 96, t),
+            g: bare ? mix(90, 112, s) : mix(84, 106, t),
+            b: bare ? mix(86, 106, s) : mix(52, 66, t),
+            rough: bare ? 0.8 : 0.92,
+          };
+        },
+        2.4
+      );
+    }
+    case 'ash-floor': {
+      // Scorched barrens: charcoal ground, drifting grey ash, dying embers.
+      const char = makeValueNoise(0x0a51, 32);
+      const fleck = makeValueNoise(0x0a52, 64);
+      return heightFieldPBR(
+        S,
+        (px, py) => {
+          const c = char((px / S) * 32, (py / S) * 32);
+          const f = fleck((px / S) * 64, (py / S) * 64);
+          const ember = f > 0.94; // rare glowing cinders
+          const shade = 0.55 + c * 0.5;
+          return {
+            h: c * 0.5 + f * 0.3,
+            r: ember ? 190 : 44 * shade,
+            g: ember ? 84 : 40 * shade,
+            b: ember ? 30 : 38 * shade,
+            rough: ember ? 0.4 : 0.88,
+          };
+        },
+        2.2
+      );
+    }
     case 'wood-floor': {
       const grain = makeValueNoise(0x00d, 64);
       const plankShade = rand(0x0d0d);
@@ -655,7 +740,10 @@ function generateTilePBR(name: string): PbrMaps {
 }
 
 /** Ground tiles that ship full PBR relief. Others fall back to flat colour. */
-const PBR_TILES = new Set(['grass', 'road', 'water', 'wood-floor', 'dungeon-floor', 'rock', 'stairs', 'portal-pad']);
+const PBR_TILES = new Set([
+  'grass', 'road', 'water', 'wood-floor', 'dungeon-floor', 'rock', 'stairs', 'portal-pad',
+  'forest-floor', 'marsh-floor', 'highland-floor', 'ash-floor',
+]);
 const tilePbrCache = new Map<string, PbrMaps>();
 
 export function hasTilePBR(name: string): boolean {
@@ -1140,6 +1228,45 @@ function drawTree(): HTMLCanvasElement {
   return c;
 }
 
+/** Deep-forest pine: tall, dark, stacked boughs. */
+function drawPine(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(16, 30);
+  px(7, 22, 2, 8, '#3a2a18'); // trunk
+  px(2, 16, 12, 6, '#14281a'); // wide bottom boughs
+  px(3, 11, 10, 6, '#1a3320');
+  px(4, 7, 8, 5, '#204026');
+  px(5, 4, 6, 4, '#284c2d');
+  px(7, 1, 2, 4, '#2f5834'); // crown spike
+  return c;
+}
+
+/** Bare dead snag for the ashlands. */
+function drawDeadTree(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(16, 26);
+  px(7, 8, 2, 18, '#3d332c'); // trunk
+  px(4, 6, 4, 2, '#463b32'); // reaching limbs
+  px(9, 4, 5, 2, '#463b32');
+  px(3, 4, 2, 3, '#3d332c');
+  px(12, 2, 2, 3, '#3d332c');
+  px(6, 2, 2, 7, '#463b32');
+  px(9, 10, 3, 1, '#352c26'); // stub
+  return c;
+}
+
+/** Gnarled fen tree: squat trunk, droopy canopy, hanging moss. */
+function drawSwampTree(): HTMLCanvasElement {
+  const [c, px] = pixelPainter(18, 22);
+  px(8, 14, 3, 8, '#2e2a20'); // squat trunk
+  px(6, 17, 2, 4, '#2e2a20'); // root flare
+  px(11, 17, 2, 4, '#2e2a20');
+  px(3, 6, 12, 7, '#2c3d26'); // droopy canopy
+  px(5, 4, 8, 4, '#33472c');
+  px(2, 9, 3, 5, '#26351f'); // moss curtains
+  px(13, 8, 3, 6, '#26351f');
+  px(7, 12, 2, 3, '#26351f');
+  return c;
+}
+
 function drawSignpost(): HTMLCanvasElement {
   const [c, px] = pixelPainter(14, 18);
   px(6, 6, 2, 12, '#6b4a2a'); // post
@@ -1496,6 +1623,18 @@ export function spriteDef(variant: string): SpriteDef {
       case 'tree':
         canvas = drawTree();
         w = 2.8; h = 4.2;
+        break;
+      case 'pine':
+        canvas = drawPine();
+        w = 2.6; h = 5.2;
+        break;
+      case 'dead-tree':
+        canvas = drawDeadTree();
+        w = 2.1; h = 3.6;
+        break;
+      case 'swamp-tree':
+        canvas = drawSwampTree();
+        w = 2.8; h = 3.3;
         break;
       case 'barrel':
         canvas = drawBarrel();

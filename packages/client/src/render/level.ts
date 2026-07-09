@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE_SIZE, Tile, TileMap, isBlocking, isWallLike } from '@webmagic/shared';
+import { Biome, TILE_SIZE, Tile, TileMap, isBlocking, isWallLike } from '@webmagic/shared';
 import type { PropDef } from '@webmagic/shared';
 import { hasTilePBR, spriteDef, tilePBR, tileTexture, wallPBR } from './textures';
 
@@ -26,12 +26,32 @@ export class LevelMesh {
     const wallHeight = kind === 'dungeon' ? DUNGEON_WALL_HEIGHT : WALL_HEIGHT;
     const floorBuckets = new Map<string, number[]>(); // texture -> positions of tile quads
     const wallBuckets = new Map<string, { pos: number[]; uv: number[]; nrm: number[] }>();
-    const treePositions: { x: number; y: number }[] = [];
+    const treeBuckets = new Map<string, { x: number; y: number }[]>(); // sprite variant -> positions
     const spikePositions: { x: number; y: number }[] = [];
 
-    const floorTexOf = (t: Tile): string | null => {
+    // The biome layer decides which wilds these are — ground art and tree
+    // species change with it, so a forest reads dark, a fen reads drowned.
+    const biomeGround = (tx: number, ty: number): string => {
+      switch (map.biomeAt(tx, ty)) {
+        case Biome.Forest: return 'forest-floor';
+        case Biome.Marsh: return 'marsh-floor';
+        case Biome.Highland: return 'highland-floor';
+        case Biome.Ashland: return 'ash-floor';
+        default: return 'grass';
+      }
+    };
+    const treeVariant = (tx: number, ty: number): string => {
+      switch (map.biomeAt(tx, ty)) {
+        case Biome.Forest:
+        case Biome.Highland: return 'pine';
+        case Biome.Marsh: return 'swamp-tree';
+        case Biome.Ashland: return 'dead-tree';
+        default: return 'tree';
+      }
+    };
+    const floorTexOf = (t: Tile, tx: number, ty: number): string | null => {
       switch (t) {
-        case Tile.Grass: return 'grass';
+        case Tile.Grass: return biomeGround(tx, ty);
         case Tile.Road: return 'road';
         case Tile.Water: return 'water';
         case Tile.Floor: return kind === 'dungeon' ? 'dungeon-floor' : 'wood-floor';
@@ -39,7 +59,7 @@ export class LevelMesh {
         case Tile.StairsDown: return 'stairs';
         case Tile.PortalPad: return 'portal-pad';
         case Tile.Spikes: return 'spikes';
-        case Tile.Tree: return 'grass';
+        case Tile.Tree: return biomeGround(tx, ty);
         default: return null;
       }
     };
@@ -49,10 +69,15 @@ export class LevelMesh {
     for (let ty = 0; ty < map.h; ty++) {
       for (let tx = 0; tx < map.w; tx++) {
         const t = map.get(tx, ty);
-        if (t === Tile.Tree) treePositions.push({ x: (tx + 0.5) * TILE_SIZE, y: (ty + 0.5) * TILE_SIZE });
+        if (t === Tile.Tree) {
+          const variant = treeVariant(tx, ty);
+          let arr = treeBuckets.get(variant);
+          if (!arr) treeBuckets.set(variant, (arr = []));
+          arr.push({ x: (tx + 0.5) * TILE_SIZE, y: (ty + 0.5) * TILE_SIZE });
+        }
         if (t === Tile.Spikes) spikePositions.push({ x: (tx + 0.5) * TILE_SIZE, y: (ty + 0.5) * TILE_SIZE });
 
-        const floorTex = floorTexOf(t);
+        const floorTex = floorTexOf(t, tx, ty);
         if (floorTex) {
           let arr = floorBuckets.get(floorTex);
           if (!arr) floorBuckets.set(floorTex, (arr = []));
@@ -152,13 +177,13 @@ export class LevelMesh {
       this.disposables.push(geo, mat);
     }
 
-    // --- trees as merged cross-quads
-    if (treePositions.length > 0) {
-      const tree = spriteDef('tree');
+    // --- trees as merged cross-quads, one mesh per biome species
+    for (const [variant, positions] of treeBuckets) {
+      const tree = spriteDef(variant);
       const pos: number[] = [];
       const uv: number[] = [];
       const nrm: number[] = [];
-      for (const p of treePositions) {
+      for (const p of positions) {
         pushCrossQuads(pos, uv, nrm, p.x, p.y, tree.w, tree.h, map.elevationAtWorld(p.x, p.y));
       }
       const geo = new THREE.BufferGeometry();

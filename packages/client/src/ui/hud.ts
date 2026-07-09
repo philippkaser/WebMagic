@@ -1,5 +1,21 @@
-import { CLASSES, ClassId, SKILLS, SkillId, Tile, worldToTile } from '@webmagic/shared';
+import { Biome, CLASSES, ClassId, SKILLS, SkillId, Tile, worldToTile } from '@webmagic/shared';
 import type { WorldState } from '../state';
+
+/** Minimap ground/canopy colours per biome so the varied wilds read at a glance. */
+const GRASS_MINIMAP: Record<Biome, string> = {
+  [Biome.Meadow]: '#2a3d20',
+  [Biome.Forest]: '#20301a',
+  [Biome.Marsh]: '#2c3626',
+  [Biome.Highland]: '#3c4234',
+  [Biome.Ashland]: '#332e2c',
+};
+const TREE_MINIMAP: Record<Biome, string> = {
+  [Biome.Meadow]: '#1c2c14',
+  [Biome.Forest]: '#12210f',
+  [Biome.Marsh]: '#1d2916',
+  [Biome.Highland]: '#162412',
+  [Biome.Ashland]: '#2a2320',
+};
 
 const SKILL_ICONS: Record<SkillId, string> = {
   slash: '⚔️',
@@ -225,9 +241,9 @@ export class Hud {
         const t = map.get(ctx0 + vx, cty0 + vy);
         let color: string | null = null;
         switch (t) {
-          case Tile.Grass: color = '#2a3d20'; break;
+          case Tile.Grass: color = GRASS_MINIMAP[map.biomeAt(ctx0 + vx, cty0 + vy)] ?? '#2a3d20'; break;
           case Tile.Road: color = '#584a33'; break;
-          case Tile.Tree: color = '#1c2c14'; break;
+          case Tile.Tree: color = TREE_MINIMAP[map.biomeAt(ctx0 + vx, cty0 + vy)] ?? '#1c2c14'; break;
           case Tile.Water: color = '#16324a'; break;
           case Tile.Rock: color = '#3d3a36'; break;
           case Tile.Floor: color = '#4a4152'; break;

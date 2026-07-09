@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateOverworld } from './worldgen';
 import { generateDungeonFloor } from './dungeongen';
-import { TileMap, Tile, TILE_SIZE, worldToTile } from '../tiles';
+import { Biome, TileMap, Tile, TILE_SIZE, worldToTile } from '../tiles';
 
 /** BFS over walkable tiles: can you reach tile `b` from tile `a`? */
 function reachable(map: TileMap, ax: number, ay: number, bx: number, by: number): boolean {
@@ -86,6 +86,47 @@ test('every village inn spawn is on walkable ground', () => {
   const w = generateOverworld(31337);
   for (const v of w.villages) {
     assert.ok(!w.map.blockedAtWorld(v.innSpawn.x, v.innSpawn.y), `inn spawn for ${v.name} must be walkable`);
+  }
+});
+
+// ---- biomes + regions -------------------------------------------------------
+
+test('biome layer is deterministic and covers multiple biomes', () => {
+  const a = generateOverworld(777);
+  const b = generateOverworld(777);
+  assert.deepEqual([...a.map.biomes], [...b.map.biomes], 'same seed -> identical biomes');
+
+  const seen = new Set<number>();
+  for (const bio of a.map.biomes) seen.add(bio);
+  assert.ok(seen.has(Biome.Meadow), 'has meadow');
+  assert.ok(seen.has(Biome.Forest), 'has forest');
+  assert.ok(seen.size >= 3, 'the world has at least three biome kinds');
+});
+
+test('named regions exist, are deterministic, and forests are among them', () => {
+  const a = generateOverworld(777);
+  const b = generateOverworld(777);
+  assert.deepEqual(a.regions, b.regions, 'regions (and their names) are deterministic');
+  assert.ok(a.regions.length > 0, 'the wilds have named regions');
+  assert.ok(a.regions.some((r) => r.kind === 'forest'), 'at least one named forest');
+  for (const r of a.regions) {
+    assert.ok(r.name.length > 0, 'every region has a name');
+    assert.ok(r.tiles >= 50, 'regions are substantial');
+    assert.ok(a.map.inBounds(r.cx, r.cy), 'region centroid is on the map');
+  }
+});
+
+test('villages sit on tamed meadow; wolf dens live inside named forests', () => {
+  const w = generateOverworld(4321);
+  for (const v of w.villages) {
+    assert.equal(w.map.biomeAt(v.cx, v.cy), Biome.Meadow, `${v.name} is on meadow`);
+  }
+  const dens = w.camps.filter((c) => c.monster === 'wolf');
+  assert.ok(dens.length > 0, 'there are wolf dens');
+  for (const den of dens) {
+    assert.notEqual(den.regionId, undefined, 'wolf dens belong to a region');
+    const region = w.regions.find((r) => r.id === den.regionId);
+    assert.ok(region && region.kind === 'forest', 'wolf dens are in forests');
   }
 });
 

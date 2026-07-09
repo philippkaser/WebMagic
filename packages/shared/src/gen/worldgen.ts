@@ -1,5 +1,5 @@
 import { Rng, hashSeed, makeNoise2D, Vec2, dist } from '../math';
-import { Tile, TileMap, tileCenter } from '../tiles';
+import { Biome, Tile, TileMap, tileCenter } from '../tiles';
 import type { MonsterId } from '../content/monsters';
 
 export interface HouseDef {
@@ -29,6 +29,8 @@ export interface CampDef {
   radius: number;
   monster: MonsterId;
   count: number;
+  /** The named region this camp lives in (wolf dens in their forest). */
+  regionId?: number;
 }
 
 export interface PortalDef {
@@ -62,6 +64,25 @@ export interface PoiDef {
   text?: string; // lore shown on interact (obelisks/shrines)
 }
 
+/**
+ * A named region of the wilds — one connected sweep of forest, marsh,
+ * highland or ashland, found by flood-filling the biome layer. Regions give
+ * the world places (the life sim homes creatures in them, lore names them).
+ * Tile coordinates.
+ */
+export interface RegionDef {
+  id: number;
+  kind: 'forest' | 'marsh' | 'highland' | 'ashland';
+  name: string;
+  /** Centroid tile. */
+  cx: number;
+  cy: number;
+  /** Approximate radius in tiles (from area). */
+  radius: number;
+  /** Component size in tiles. */
+  tiles: number;
+}
+
 export interface OverworldData {
   map: TileMap;
   villages: VillageDef[];
@@ -74,6 +95,8 @@ export interface OverworldData {
   props: PropDef[];
   /** Wilderness landmarks — shrines, obelisks, ruins. */
   pois: PoiDef[];
+  /** Named biome regions — forests, fens, highlands, ashlands. */
+  regions: RegionDef[];
 }
 
 const VILLAGE_NAMES = [
@@ -85,8 +108,22 @@ const PORTAL_NAMES = [
   'Catacombs of Vhal', 'The Sunken Halls', 'Maw of Cinders', 'Barrow of Kings',
 ];
 
-export const OVERWORLD_W = 240;
-export const OVERWORLD_H = 240;
+const FOREST_NAMES = [
+  'The Gloomwood', 'The Whisperwood', 'Tanglewood', 'The Murkwald',
+  'Hollowpine Forest', 'Wolfwood', 'The Blackboughs', 'Thornshade',
+];
+const MARSH_NAMES = [
+  'The Sallow Fen', 'Mirebog', 'The Drowned Meadow', 'Rotmarsh', 'The Weeping Flats',
+];
+const HIGHLAND_NAMES = [
+  'The Grey Tors', 'Windscar Heights', 'Cragfell', 'The Old Shoulders', 'The Bleak Steps',
+];
+const ASHLAND_NAMES = [
+  'The Cinderwaste', 'Ashenfield', 'The Scorch', 'Emberreach',
+];
+
+export const OVERWORLD_W = 288;
+export const OVERWORLD_H = 288;
 
 const OBELISK_LORE = [
   'Weathered runes: "Here the first lantern was lit against the long dark."',
@@ -116,17 +153,71 @@ export function generateOverworld(seed: number): OverworldData {
     }
   }
 
-  // --- scatter terrain features: forests, rock outcrops, ponds
-  scatterBlobs(rng, map, Tile.Tree, 160, 2, 6);
-  scatterBlobs(rng, map, Tile.Rock, 44, 1, 3);
-  scatterBlobs(rng, map, Tile.Water, 26, 2, 5);
+  // --- biome pass: moisture and relief noise carve the world into regions
+  // with real character — deep forests, sodden fens, rocky highlands and
+  // scorched ashlands — instead of one endless grassland.
+  const moist = makeNoise2D(hashSeed(seed, 11), 24);
+  const moist2 = makeNoise2D(hashSeed(seed, 12), 48);
+  const relief = makeNoise2D(hashSeed(seed, 13), 24);
+  for (let ty = 0; ty < map.h; ty++) {
+    for (let tx = 0; tx < map.w; tx++) {
+      const m = moist(tx / 44, ty / 44) * 0.85 + moist2(tx / 15, ty / 15) * 0.15;
+      const rl = relief(tx / 48, ty / 48);
+      let b = Biome.Meadow;
+      if (rl > 0.72) b = Biome.Highland;
+      else if (m > 0.72) b = Biome.Marsh;
+      else if (m > 0.47) b = Biome.Forest;
+      else if (m < 0.17) b = Biome.Ashland;
+      map.setBiome(tx, ty, b);
+    }
+  }
 
-  // --- villages, spread apart
+  // --- biome features: each region grows what belongs there
+  const clump = makeNoise2D(hashSeed(seed, 14), 40);
+  const pool = makeNoise2D(hashSeed(seed, 15), 32);
+  for (let ty = 2; ty < map.h - 2; ty++) {
+    for (let tx = 2; tx < map.w - 2; tx++) {
+      if (map.get(tx, ty) !== Tile.Grass) continue;
+      switch (map.biomeAt(tx, ty)) {
+        case Biome.Forest:
+          // dense woods with organic clearings — roads are carved through later
+          if (clump(tx / 3.2, ty / 3.2) > 0.42) map.set(tx, ty, Tile.Tree);
+          break;
+        case Biome.Marsh:
+          // still black pools threaded with dry ground
+          if (pool(tx / 4.5, ty / 4.5) > 0.64) map.set(tx, ty, Tile.Water);
+          else if (clump(tx / 2.5, ty / 2.5) > 0.78) map.set(tx, ty, Tile.Tree); // gnarled fen trees
+          break;
+        case Biome.Highland:
+          if (clump(tx / 3.5, ty / 3.5) > 0.72) map.set(tx, ty, Tile.Rock);
+          break;
+        case Biome.Ashland:
+          // sparse dead snags and cinder boulders
+          if (clump(tx / 2.2, ty / 2.2) > 0.84) map.set(tx, ty, Tile.Tree);
+          else if (pool(tx / 2.8, ty / 2.8) > 0.9) map.set(tx, ty, Tile.Rock);
+          break;
+      }
+    }
+  }
+
+  // meadow copses, outcrops and ponds — sparser now that forests are biome-grown
+  scatterBlobs(rng, map, Tile.Tree, 70, 2, 5);
+  scatterBlobs(rng, map, Tile.Rock, 30, 1, 3);
+  scatterBlobs(rng, map, Tile.Water, 18, 2, 5);
+
+  // --- named regions: connected biome sweeps become places with names
+  const regions = extractRegions(map);
+
+  // --- villages: on open meadow, spread apart
   const villages: VillageDef[] = [];
   const villageCount = 6;
-  const spots = pickSpreadPoints(rng, map, villageCount, 52, 26);
+  const spots = pickSpreadPoints(rng, map, villageCount, 50, 26, (x, y) =>
+    map.biomeAt(x, y) === Biome.Meadow
+  );
   for (let i = 0; i < spots.length; i++) {
     villages.push(buildVillage(rng, map, torches, i, spots[i].x, spots[i].y));
+    // settlements tame the land around them
+    clearBiome(map, spots[i].x, spots[i].y, 13, Biome.Meadow);
   }
 
   // --- roads: chain villages, then one extra loop connection
@@ -138,11 +229,14 @@ export function generateOverworld(seed: number): OverworldData {
     roads.push(carveRoad(rng, map, villages[villages.length - 1], villages[0]));
   }
 
-  // --- monster camps: away from villages
+  // --- monster camps: goblin and orc war-camps on open ground; wolf dens
+  // hidden deep inside the named forests (the packs live there — hunger is
+  // what draws them out into the open world).
   const camps: CampDef[] = [];
-  const campMonsters: MonsterId[] = ['goblin', 'goblin', 'wolf', 'wolf', 'orc', 'orc', 'goblin', 'orc'];
+  const campMonsters: MonsterId[] = ['goblin', 'goblin', 'goblin', 'orc', 'orc', 'orc', 'goblin', 'orc'];
   const campSpots = pickSpreadPoints(rng, map, campMonsters.length, 20, 10, (x, y) =>
-    villages.every((v) => dist(x, y, v.cx, v.cy) > v.radius + 14)
+    villages.every((v) => dist(x, y, v.cx, v.cy) > v.radius + 14) &&
+    map.biomeAt(x, y) !== Biome.Marsh
   );
   for (let i = 0; i < campSpots.length; i++) {
     const radius = rng.int(4, 6);
@@ -150,12 +244,38 @@ export function generateOverworld(seed: number): OverworldData {
     const c = tileCenter(campSpots[i].x, campSpots[i].y);
     torches.push(c); // camp fire
     camps.push({
-      id: i,
+      id: camps.length,
       cx: campSpots[i].x,
       cy: campSpots[i].y,
       radius,
       monster: campMonsters[i],
       count: rng.int(4, 6),
+    });
+  }
+
+  // wolf dens: one per sizeable forest, biggest woods first (wolves light no fires)
+  const forests = regions.filter((r) => r.kind === 'forest').sort((a, b) => b.tiles - a.tiles);
+  for (const forest of forests.slice(0, 4)) {
+    let den: Vec2 | null = null;
+    for (let tries = 0; tries < 30; tries++) {
+      const x = Math.round(forest.cx + rng.range(-forest.radius * 0.5, forest.radius * 0.5));
+      const y = Math.round(forest.cy + rng.range(-forest.radius * 0.5, forest.radius * 0.5));
+      if (!map.inBounds(x, y) || map.biomeAt(x, y) !== Biome.Forest) continue;
+      if (villages.some((v) => dist(x, y, v.cx, v.cy) < v.radius + 12)) continue;
+      den = { x, y };
+      break;
+    }
+    if (!den) continue;
+    const radius = rng.int(3, 4);
+    clearArea(map, den.x, den.y, radius);
+    camps.push({
+      id: camps.length,
+      cx: den.x,
+      cy: den.y,
+      radius,
+      monster: 'wolf',
+      count: rng.int(3, 5),
+      regionId: forest.id,
     });
   }
 
@@ -208,13 +328,26 @@ export function generateOverworld(seed: number): OverworldData {
   }
 
   // --- terrain elevation: rolling hills across the wilds, flattened around
-  // settlements, roads and portals so gameplay spaces stay level.
+  // settlements, roads and portals so gameplay spaces stay level. Biomes
+  // shape the relief: highlands rise, fens lie dead flat, ashlands smoulder low.
   const hn = makeNoise2D(hashSeed(seed, 7), 20);
   const hn2 = makeNoise2D(hashSeed(seed, 8), 40);
   for (let ty = 0; ty < map.h; ty++) {
     for (let tx = 0; tx < map.w; tx++) {
       const n = hn(tx / 11, ty / 11) * 0.7 + hn2(tx / 5, ty / 5) * 0.3;
-      map.setHeight(tx, ty, Math.round(Math.pow(n, 1.4) * 5)); // 0..5 levels
+      let lvl = Math.round(Math.pow(n, 1.4) * 5); // 0..5 levels
+      switch (map.biomeAt(tx, ty)) {
+        case Biome.Highland:
+          lvl = Math.min(8, lvl + 2 + Math.round(hn2(tx / 7, ty / 7) * 2));
+          break;
+        case Biome.Marsh:
+          lvl = 0;
+          break;
+        case Biome.Ashland:
+          lvl = Math.round(lvl * 0.5);
+          break;
+      }
+      map.setHeight(tx, ty, lvl);
       if (map.get(tx, ty) === Tile.Road) map.setHeight(tx, ty, 0);
     }
   }
@@ -245,7 +378,90 @@ export function generateOverworld(seed: number): OverworldData {
     }
   }
 
-  return { map, villages, camps, portals, roads, torches, props, pois };
+  return { map, villages, camps, portals, roads, torches, props, pois, regions };
+}
+
+/**
+ * Flood-fill the biome layer into connected components; sweeps big enough to
+ * matter become named regions. Deterministic: scan order and name pools are
+ * fixed, so client and server agree on every name.
+ */
+function extractRegions(map: TileMap): RegionDef[] {
+  const kindOf = (b: Biome): RegionDef['kind'] | null =>
+    b === Biome.Forest ? 'forest'
+    : b === Biome.Marsh ? 'marsh'
+    : b === Biome.Highland ? 'highland'
+    : b === Biome.Ashland ? 'ashland'
+    : null;
+  // Only sweeps big enough to be *places* get a name — smaller patches remain
+  // anonymous terrain texture.
+  const MIN_TILES: Record<RegionDef['kind'], number> = { forest: 240, marsh: 160, highland: 240, ashland: 180 };
+  const NAME_POOLS: Record<RegionDef['kind'], string[]> = {
+    forest: FOREST_NAMES,
+    marsh: MARSH_NAMES,
+    highland: HIGHLAND_NAMES,
+    ashland: ASHLAND_NAMES,
+  };
+  const counters: Record<RegionDef['kind'], number> = { forest: 0, marsh: 0, highland: 0, ashland: 0 };
+
+  const visited = new Uint8Array(map.w * map.h);
+  const regions: RegionDef[] = [];
+  const stack: number[] = [];
+  for (let ty = 0; ty < map.h; ty++) {
+    for (let tx = 0; tx < map.w; tx++) {
+      const start = ty * map.w + tx;
+      if (visited[start]) continue;
+      visited[start] = 1;
+      const b = map.biomeAt(tx, ty);
+      const kind = kindOf(b);
+      if (!kind) continue;
+
+      let count = 0;
+      let sx = 0;
+      let sy = 0;
+      stack.length = 0;
+      stack.push(start);
+      while (stack.length > 0) {
+        const i = stack.pop()!;
+        const ix = i % map.w;
+        const iy = (i / map.w) | 0;
+        count++;
+        sx += ix;
+        sy += iy;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = ix + dx;
+          const ny = iy + dy;
+          if (nx < 0 || ny < 0 || nx >= map.w || ny >= map.h) continue;
+          const ni = ny * map.w + nx;
+          if (visited[ni] || map.biomeAt(nx, ny) !== b) continue;
+          visited[ni] = 1;
+          stack.push(ni);
+        }
+      }
+
+      if (count < MIN_TILES[kind]) continue;
+      const pool = NAME_POOLS[kind];
+      regions.push({
+        id: regions.length,
+        kind,
+        name: pool[counters[kind]++ % pool.length],
+        cx: Math.round(sx / count),
+        cy: Math.round(sy / count),
+        radius: Math.max(4, Math.round(Math.sqrt(count / Math.PI))),
+        tiles: count,
+      });
+    }
+  }
+  return regions;
+}
+
+/** Repaint the biome layer in a disc (settlements tame the wilds around them). */
+function clearBiome(map: TileMap, cx: number, cy: number, r: number, to: Biome): void {
+  for (let x = cx - r; x <= cx + r; x++) {
+    for (let y = cy - r; y <= cy + r; y++) {
+      if (map.inBounds(x, y) && dist(x, y, cx, cy) <= r + 0.5) map.setBiome(x, y, to);
+    }
+  }
 }
 
 /** Carve a rough ring of broken wall tiles around a ruin center. */
