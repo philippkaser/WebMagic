@@ -40,14 +40,16 @@ const GUARD_LINES = [
   'Stay behind the torchline after dark.',
 ];
 
-/** Combat profile for village guards (they reuse the monster stat shape). */
+/** Combat profile for village guards (they reuse the monster stat shape).
+ *  Tough enough to hold a raid off, no longer an unbeatable wall — guards
+ *  are attackable now, and fighting one should be dangerous, not hopeless. */
 export const GUARD_COMBAT: MonsterDef = {
   id: 'goblin', // unused for guards
   name: 'Guard',
   level: 5,
-  hp: 140,
-  damage: 16,
-  speed: 5.5,
+  hp: 110,
+  damage: 12,
+  speed: 5.2,
   radius: 0.45,
   aggroRange: 12,
   attackRange: 1.8,
@@ -241,7 +243,9 @@ function tickCritter(zone: Zone, e: Entity, dt: number, now: number): void {
   }
 
   const threat = ai.targetId ? zone.entities.get(ai.targetId) : undefined;
-  if (threat && !threat.dead && dist(e.x, e.y, threat.x, threat.y) < senseRange + 2) {
+  // Flee gate is wider than the sense range so a critter shot from a distance
+  // (its attacker is assigned as targetId) still bolts.
+  if (threat && !threat.dead && dist(e.x, e.y, threat.x, threat.y) < Math.max(senseRange + 2, 13)) {
     // Sprint directly away from the threat.
     const ang = Math.atan2(e.y - threat.y, e.x - threat.x);
     const flee = e.speed;
@@ -445,9 +449,14 @@ function villagerActivityFor(time: number): VillagerActivity {
 
 function tickVillager(host: AiHost, zone: Zone, e: Entity, dt: number, now: number, clock: WorldClock): void {
   const ai = e.ai!;
-  // Danger overrides everything: run from monsters, guards will handle them.
+  // Danger overrides everything: run from monsters — and from whoever just
+  // attacked them (players included), for as long as the fright lasts.
   if (now >= ai.nextThink - 1200) {
-    const threat = scanForTarget(zone, e, 7, 'monsters');
+    let threat = scanForTarget(zone, e, 7, 'monsters');
+    if (!threat && ai.fleeFromId && now < (ai.fleeUntil ?? 0)) {
+      const attacker = zone.entities.get(ai.fleeFromId);
+      if (attacker && !attacker.dead && dist(e.x, e.y, attacker.x, attacker.y) < 14) threat = attacker;
+    }
     if (threat) {
       const ang = Math.atan2(e.y - threat.y, e.x - threat.x);
       ai.routine && (ai.routine.commute = undefined);

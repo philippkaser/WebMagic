@@ -60,6 +60,8 @@ export interface AiState {
   /** Caravan: id of the caravan leader this guard escorts. */
   escortId?: number;
   fleeFromId?: number;
+  /** Civilians flee their attacker until this passes. */
+  fleeUntil?: number;
 
   // --- life sim
   /** Accumulating needs (predators hunger, prey just graze). */
@@ -151,6 +153,9 @@ export interface Entity {
   // loot
   item?: Item;
   despawnAt?: number;
+  /** Freshly dropped loot can't be walked over again until this passes —
+   *  otherwise dropping an item instantly picks it back up. */
+  pickupCdUntil?: number;
 
   // portals
   portalId?: number;

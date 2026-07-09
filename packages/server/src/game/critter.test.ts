@@ -4,6 +4,8 @@ import { FxMsg, MONSTERS, Tile, TileMap, dist } from '@webmagic/shared';
 import { Zone, ZoneHost } from './zone';
 import { AiHost, tickAi, WorldClock } from './ai';
 import { spawnCritter, spawnMonster, spawnNpc } from './spawn';
+import { castSkill } from './combat';
+import { Player } from './player';
 import type { Entity } from './entities';
 
 /** A host that records deaths and advances a simulated clock with each tick. */
@@ -75,6 +77,38 @@ test('hunger accumulates over time while a predator prowls', () => {
   const host = makeHost();
   step(host, zone, 30, 600);
   assert.ok(wolf.ai!.drives!.hunger > 0.5, 'an empty belly gets emptier');
+});
+
+function makePlayer(name: string, x: number, y: number): Player {
+  return new Player({
+    name, classId: 'warrior', level: 5, xp: 0, inventory: [], equipment: {}, x, y,
+  });
+}
+
+test('open PvP: a player\'s slash strikes another player', () => {
+  const zone = new Zone('t:pvp', 'overworld', new TileMap(16, 16, Tile.Grass), []);
+  const attacker = makePlayer('Aggro', 10, 10);
+  const victim = makePlayer('Victim', 11.2, 10);
+  zone.addEntity(attacker.entity);
+  zone.addEntity(victim.entity);
+
+  const host = makeHost();
+  const err = castSkill(host, zone, attacker, 'slash', 0, 0); // aim east at the victim
+  assert.equal(err, null, 'the cast succeeds');
+  assert.ok(victim.entity.hp < victim.entity.maxHp, 'the other player takes the hit');
+});
+
+test('guards can be attacked — and fight back against their attacker', () => {
+  const zone = new Zone('t:guard', 'overworld', new TileMap(16, 16, Tile.Grass), []);
+  const guard = spawnNpc(zone, 'guard', 11.2, 10, { name: 'Testguard' });
+  const attacker = makePlayer('Outlaw', 10, 10);
+  zone.addEntity(attacker.entity);
+
+  const host = makeHost();
+  const err = castSkill(host, zone, attacker, 'slash', 0, 0);
+  assert.equal(err, null);
+  assert.ok(guard.hp < guard.maxHp, 'the guard takes the hit');
+  assert.equal(guard.ai!.targetId, attacker.entity.id, 'the guard turns on the attacker');
 });
 
 test('attacks are wound up: the blow lands after the telegraph, not instantly', () => {

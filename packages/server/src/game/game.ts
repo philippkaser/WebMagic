@@ -199,9 +199,10 @@ export class GameServer implements AiHost {
         if (this.tickCount % 20 === 0) this.checkDiscovery(zone, player);
       }
 
-      // Walk-over loot pickup.
+      // Walk-over loot pickup (freshly dropped items wait a beat first).
       for (const e of zone.grid.query(ent.x, ent.y, PICKUP_RADIUS)) {
         if (e.kind !== 'loot' || !e.item) continue;
+        if (e.pickupCdUntil && now < e.pickupCdUntil) continue;
         const item = e.item;
         if (zone.kind === 'dungeon') item.dungeonLoot = true;
         if (player.addItem(item)) {
@@ -524,7 +525,9 @@ export class GameServer implements AiHost {
         const zone = this.zoneById(player.zoneId);
         const item = player.removeItem(msg.itemId);
         if (item && zone) {
-          dropLoot(zone, player.entity.x, player.entity.y, item, this.now());
+          const loot = dropLoot(zone, player.entity.x, player.entity.y, item, this.now());
+          // Grace period so the drop isn't instantly hoovered back up.
+          loot.pickupCdUntil = this.now() + 2500;
           this.sendInventory(player);
         }
         break;

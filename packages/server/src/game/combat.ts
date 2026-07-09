@@ -1,5 +1,5 @@
 import { SKILLS, SkillId, angleDiff } from '@webmagic/shared';
-import { Entity, Faction, allocEntityId } from './entities';
+import { Entity, allocEntityId } from './entities';
 import { Zone, ZoneHost } from './zone';
 import type { Player } from './player';
 
@@ -44,9 +44,19 @@ export function spawnProjectile(
   return e;
 }
 
-function hostileTo(faction: Faction, e: Entity): boolean {
-  return !e.dead && e.faction !== 'none' && e.faction !== faction &&
-    (e.kind === 'player' || e.kind === 'monster' || e.kind === 'npc');
+/**
+ * What a player's attack can strike: open PvP (other players), monsters, NPCs
+ * (guards retaliate, civilians flee) and even critters — everything alive
+ * except the attacker themself and inanimate fixtures.
+ */
+function attackable(attacker: Entity, e: Entity): boolean {
+  if (e.dead || e === attacker) return false;
+  if (e.kind !== 'player' && e.kind !== 'monster' && e.kind !== 'npc') return false;
+  if (e.faction === 'none') {
+    // faction-less npcs are critters (huntable) or fixtures (not attackable)
+    return e.variant === 'chicken' || e.variant === 'deer';
+  }
+  return true;
 }
 
 /**
@@ -91,7 +101,7 @@ export function castSkill(
       });
       const targets = zone.grid
         .query(ent.x, ent.y, def.range + 0.5)
-        .filter((e) => hostileTo(ent.faction, e))
+        .filter((e) => attackable(ent, e))
         .filter((e) => Math.abs(angleDiff(aim, Math.atan2(e.y - ent.y, e.x - ent.x))) < Math.PI / 3);
       for (const t of targets) {
         zone.applyDamage(host, t, power, ent, now);
@@ -115,7 +125,7 @@ export function castSkill(
     case 'nova': {
       const radius = def.radius ?? 3;
       host.broadcastFx(zone, { t: 'fx', kind: 'nova', x: ent.x, y: ent.y, color: def.lightColor, amount: radius });
-      const targets = zone.grid.query(ent.x, ent.y, radius).filter((e) => hostileTo(ent.faction, e));
+      const targets = zone.grid.query(ent.x, ent.y, radius).filter((e) => attackable(ent, e));
       for (const t of targets) {
         zone.applyDamage(host, t, power, ent, now);
         if (def.slowMs && !t.dead) t.slowUntil = now + def.slowMs;

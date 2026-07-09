@@ -137,12 +137,13 @@ export class Zone {
       e.y = ny;
       this.grid.update(e);
 
-      // hit detection
+      // hit detection — player bolts strike anything alive except their owner
+      // (open PvP); monster bolts still pass through fellow monsters.
       const near = this.grid.query(e.x, e.y, 1.2);
       for (const target of near) {
         if (target.dead || target.id === e.ownerId) continue;
         if (target.kind !== 'player' && target.kind !== 'monster' && target.kind !== 'npc') continue;
-        if (target.faction === e.faction) continue;
+        if (!this.projectileCanHit(e, target)) continue;
         const dx = target.x - e.x;
         const dy = target.y - e.y;
         const r = target.radius + e.radius;
@@ -151,6 +152,20 @@ export class Zone {
         break;
       }
     }
+  }
+
+  /**
+   * PvP-aware projectile rules: player bolts hit anything alive except their
+   * owner and fixtures; monster bolts spare fellow monsters and critters.
+   */
+  private projectileCanHit(proj: Entity, target: Entity): boolean {
+    if (proj.faction === 'monsters') {
+      return target.faction !== 'monsters' && target.faction !== 'none';
+    }
+    if (target.faction === 'none') {
+      return target.variant === 'chicken' || target.variant === 'deer';
+    }
+    return true;
   }
 
   /**
@@ -181,8 +196,9 @@ export class Zone {
       amount: e.explodeRadius,
     });
     for (const target of this.grid.query(e.x, e.y, e.explodeRadius)) {
-      if (target.dead || target.faction === e.faction || target.faction === 'none') continue;
+      if (target.dead || target.id === e.ownerId) continue;
       if (target.kind !== 'player' && target.kind !== 'monster' && target.kind !== 'npc') continue;
+      if (!this.projectileCanHit(e, target)) continue;
       // full damage on a direct hit, 70% for splash
       const dmg = target === directTarget ? damage : Math.max(1, Math.round(damage * 0.7));
       this.applyDamage(host, target, dmg, owner, now);
@@ -262,10 +278,25 @@ export class Zone {
         target.lastStaggerAt = now;
         target.stunUntil = Math.max(target.stunUntil ?? 0, now + 160);
       }
-      if (target.ai && source && !target.ai.targetId && target.kind === 'monster') {
-        // getting hit wakes monsters up
-        target.ai.mode = 'chase';
-        target.ai.targetId = source.id;
+      if (target.ai && source) {
+        if (target.kind === 'monster' && !target.ai.targetId) {
+          // getting hit wakes monsters up
+          target.ai.mode = 'chase';
+          target.ai.targetId = source.id;
+        } else if (target.kind === 'npc') {
+          if (target.monsterDef) {
+            // guards and caravan guards fight back — whoever struck them
+            target.ai.targetId = source.id;
+            target.ai.mode = 'chase';
+          } else if (target.faction === 'none') {
+            // critters bolt from their attacker
+            target.ai.targetId = source.id;
+          } else {
+            // civilians flee whoever hurt them
+            target.ai.fleeFromId = source.id;
+            target.ai.fleeUntil = now + 6000;
+          }
+        }
       }
     }
   }
