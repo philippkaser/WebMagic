@@ -91,6 +91,21 @@ to disable the `/goto` and `/xp` dev commands.
   foes), *Vampiric* (lifesteal), *Spiteful* (thorns), *Rimeheart* (a slowing frost
   aura); legendaries always have one. **Deeper dungeon floors drop higher item levels
   and rarer gear**, so diving pays off.
+- **A world of biomes and named places** — moisture and relief noise carve the
+  288×288 overworld into five biomes: open meadow, deep pine forest, sodden marsh,
+  rocky highland and scorched ashland — each with its own PBR ground art, tree
+  species, feature density, elevation character and minimap colours. Connected
+  sweeps big enough to matter become **named regions** (*The Gloomwood*, *Mirebog*,
+  *The Grey Tors*, *The Cinderwaste*…) that the life sim homes creatures in.
+- **A real life sim** — predators live by **hunger**. Wolf packs den deep in the
+  named forests and hunt the deer that live there; each forest's deer herd regrows
+  slowly toward carrying capacity, so an overhunted forest starves its pack — and
+  a starving pack **leaves the woods together** (announced in world chat) to prowl
+  the nearest village, where chickens, villagers and travellers are all fair game,
+  until it feeds and slinks home. None of it is scripted — it emerges from drives,
+  regions and prey scarcity. A **simulation LOD** keeps it affordable: creatures
+  beyond ~60 m of every player think and move coarsely, so the ecosystem lives
+  off-screen at a fraction of the cost.
 - **A living overworld** — villagers follow real daily routines: they work around the
   village square by day (stopping to chat with each other), gather at the inn in the
   evening and walk home through their front doors to sleep at night — and they talk to
@@ -138,6 +153,17 @@ to disable the `/goto` and `/xp` dev commands.
   aren't pitch black, and torch flames are drawn at higher resolution. Combat and movement have **game feel**: a trauma-based screen
   shake, springy camera kicks (a recoil punch on casts, a downward dip on landings,
   an FOV punch on nearby blasts) and a red damage vignette when you're struck.
+- **Combat that telegraphs and connects** — every monster and guard attack is
+  **wound up**: the attacker flares amber and rears for its wind-up (wolves snap in
+  260 ms, ogres take 700), and the blow lands only if you're still in reach — 
+  sidestep the telegraph and it whiffs; stagger the attacker and it's cancelled.
+  Hits have **weight**: melee blows shove (crits send targets flying), explosions
+  throw everything outward, bolts carry momentum, and heavy hits stagger monsters
+  with a beat of hit-stop. Melee swings draw a bright **arc** in the aim direction
+  visible to everyone nearby, so fights read even as a bystander.
+- **A splash screen worth arriving at** — a living title screen (twinkling stars,
+  rising embers, a pulsing hearth-glow, a flickering title) that steps into the
+  hero form on any key.
 - **Resilience** — the public HTTP surface survives malformed requests, the tick loop
   and process are guarded against stray exceptions, and the client reconnects and
   logs back in automatically if the connection drops.
@@ -198,6 +224,23 @@ are ordinary AI entities (`server/game/ai.ts` state machines: wander, chase, fle
 travel, escort) plus a `WorldSim` director that spawns caravans, schedules camp
 respawns and runs the clock. Player-visible drama (caravan ambushes, guard deaths)
 is emergent from factions + aggro, not scripted.
+
+**The life sim is drives + regions + scarcity.** Predators carry a hunger drive
+(`AiState.drives`) that climbs until a kill resets it; worldgen exposes named biome
+regions (`OverworldData.regions`) that creatures call home; `WorldSim` runs the
+ecology (deer regrow per forest, starving packs leave together). Behavior emerges
+from those three primitives, so new species are data + a spawn call, not new code
+paths.
+
+**Simulation LOD.** Entities beyond ~60 m of every player think at ~2.5 Hz over
+accumulated time (substepped collision, no tunneling) instead of every tick —
+`ai.ts` `updateLod`. The off-screen ecosystem costs a fraction of the on-screen one,
+which is what lets the living world and a large player count coexist.
+
+**Measured, not guessed.** `ServerStats` samples tick p50/p99/max, bytes out and
+messages in; a summary logs every 60 s and `/stats` prints it in-game. See
+`docs/ARCHITECTURE_REVIEW.md` for the full modularity/scaling assessment this
+branch implements Phase 0–2 of.
 
 **Dungeon lifecycle.** `DungeonManager` keeps one open instance per portal; floors
 generate lazily on first visit; the instance is disposed when the last player
@@ -275,4 +318,5 @@ thanks to AOI. The prepared seams for "massive":
 /goto portal 0     teleport to a dungeon portal (0-3)
 /goto village 1    teleport to a village inn
 /xp 500            grant XP
+/stats             server tick/traffic telemetry
 ```

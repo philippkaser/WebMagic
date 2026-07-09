@@ -23,40 +23,78 @@ canvas.game {
 
 .overlay { position: absolute; inset: 0; pointer-events: none; color: var(--ui-text); }
 
-/* ---------- login ---------- */
+/* ---------- login (splash + hero form over the living backdrop) ---------- */
 .login {
-  position: absolute; inset: 0;
+  position: absolute; inset: 0; overflow: hidden;
+  color: var(--ui-text); pointer-events: auto; background: #050308;
+}
+.login-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.login-content {
+  position: relative; z-index: 1; height: 100%;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: radial-gradient(ellipse at center, #1a1424 0%, #050308 75%);
-  color: var(--ui-text); gap: 24px; pointer-events: auto;
+  gap: 24px;
 }
 .login h1 {
-  font-size: 52px; letter-spacing: 8px; color: var(--ui-gold);
-  text-shadow: 0 0 24px #d8b45a55, 3px 3px 0 #000;
+  font-size: 64px; letter-spacing: 12px; color: var(--ui-gold);
+  text-shadow: 0 0 34px #d8b45a66, 0 0 8px #ffb84a33, 4px 4px 0 #000;
+  animation: title-flicker 5s infinite;
+  transition: font-size .45s ease, letter-spacing .45s ease;
 }
-.login .tagline { color: #9a8f7a; margin-top: -16px; }
+@keyframes title-flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: .82; }
+  94% { opacity: 1; }
+  97% { opacity: .9; }
+  98% { opacity: 1; }
+}
+.login .tagline { color: #9a8f7a; margin-top: -16px; letter-spacing: 3px; }
+.splash-hint {
+  color: var(--ui-gold); font-size: 15px; letter-spacing: 4px; margin-top: 26px;
+  animation: hint-pulse 2.1s ease-in-out infinite;
+}
+@keyframes hint-pulse { 0%, 100% { opacity: .25; } 50% { opacity: .95; } }
+
+/* the hero form is hidden until the splash is dismissed */
+.login-form {
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+  max-height: 0; opacity: 0; overflow: hidden; transform: translateY(14px);
+  transition: max-height .5s ease, opacity .5s ease .1s, transform .5s ease .1s;
+}
+.login.at-form .login-form { max-height: 560px; opacity: 1; transform: translateY(0); overflow: visible; }
+.login.at-form .splash-hint { display: none; }
+.login.at-form h1 { font-size: 44px; letter-spacing: 8px; }
+
 .login input {
-  background: #0d0a12; border: 2px solid var(--ui-border); color: var(--ui-text);
-  padding: 10px 16px; font-size: 18px; font-family: inherit; text-align: center; width: 280px;
+  background: rgba(10, 8, 14, .9); border: 2px solid var(--ui-border); color: var(--ui-text);
+  padding: 10px 16px; font-size: 18px; font-family: inherit; text-align: center; width: 300px;
+  box-shadow: inset 0 0 12px #00000088;
 }
-.login input:focus { outline: none; border-color: var(--ui-gold); }
+.login input:focus { outline: none; border-color: var(--ui-gold); box-shadow: inset 0 0 12px #00000088, 0 0 14px #d8b45a33; }
 .classes { display: flex; gap: 16px; }
 .class-card {
-  width: 180px; padding: 16px; border: 2px solid var(--ui-border); background: var(--ui-bg);
-  cursor: pointer; text-align: center; transition: border-color .15s, transform .15s;
+  width: 186px; padding: 16px; border: 2px solid var(--ui-border);
+  background: linear-gradient(180deg, rgba(20, 15, 26, .92), rgba(10, 8, 14, .92));
+  cursor: pointer; text-align: center; transition: border-color .15s, transform .15s, box-shadow .15s;
+  box-shadow: inset 0 0 18px #00000066;
 }
-.class-card:hover { transform: translateY(-4px); }
-.class-card.selected { border-color: var(--ui-gold); box-shadow: 0 0 18px #d8b45a44; }
-.class-card h3 { color: var(--ui-gold); margin-bottom: 8px; }
+.class-card:hover { transform: translateY(-4px); border-color: #8a7248; }
+.class-card.selected {
+  border-color: var(--ui-gold);
+  box-shadow: inset 0 0 18px #00000066, 0 0 22px #d8b45a55;
+}
+.class-card h3 { color: var(--ui-gold); margin-bottom: 8px; letter-spacing: 2px; }
 .class-card p { font-size: 12px; color: #9a8f7a; line-height: 1.5; }
-.class-card .icon { font-size: 40px; margin-bottom: 8px; }
+.class-card .icon { font-size: 40px; margin-bottom: 8px; filter: drop-shadow(0 0 6px #d8b45a44); }
 .login button {
-  background: #2a2033; border: 2px solid var(--ui-gold); color: var(--ui-gold);
-  font-size: 20px; font-family: inherit; padding: 12px 48px; cursor: pointer; letter-spacing: 4px;
+  background: linear-gradient(180deg, #34273f, #241a2c); border: 2px solid var(--ui-gold); color: var(--ui-gold);
+  font-size: 20px; font-family: inherit; padding: 13px 52px; cursor: pointer; letter-spacing: 5px;
+  text-shadow: 1px 1px 0 #000; box-shadow: 0 0 16px #d8b45a22;
+  transition: box-shadow .15s, background .15s;
 }
-.login button:hover { background: #3a2d47; }
-.login .error { color: #e05545; min-height: 20px; }
-.login .hint { color: #7a7060; font-size: 13px; margin-top: -14px; max-width: 300px; text-align: center; }
+.login button:hover { background: linear-gradient(180deg, #433352, #2c2136); box-shadow: 0 0 26px #d8b45a55; }
+.login .error { color: #e05545; min-height: 20px; text-shadow: 1px 1px 0 #000; }
+.login .hint { color: #7a7060; font-size: 13px; margin-top: -14px; max-width: 320px; text-align: center; }
 
 /* ---------- HUD ---------- */
 .hud-bottom {
