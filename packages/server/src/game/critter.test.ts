@@ -38,6 +38,7 @@ function step(host: AiHost & { time: number }, zone: Zone, seconds: number, step
 test('a wolf hunts a nearby chicken and kills it', () => {
   const zone = new Zone('t:hunt', 'overworld', new TileMap(32, 32, Tile.Grass), []);
   const wolf = spawnMonster(zone, MONSTERS.wolf, 10, 10);
+  wolf.ai!.drives = { hunger: 0.8 }; // spawn hunger is randomized — pin it hungry
   const chicken = spawnCritter(zone, 'chicken', 13, 10); // within a wolf's reach
 
   const host = makeHost();
