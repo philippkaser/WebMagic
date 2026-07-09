@@ -9,7 +9,14 @@ import { Entity, VillagerRoutine, allocEntityId } from './entities';
 import { Zone } from './zone';
 import { GUARD_COMBAT } from './ai';
 
-export function spawnMonster(zone: Zone, def: MonsterDef, x: number, y: number, campId?: number): Entity {
+export function spawnMonster(
+  zone: Zone,
+  def: MonsterDef,
+  x: number,
+  y: number,
+  campId?: number,
+  regionId?: number
+): Entity {
   const e: Entity = {
     id: allocEntityId(),
     kind: 'monster',
@@ -28,7 +35,15 @@ export function spawnMonster(zone: Zone, def: MonsterDef, x: number, y: number, 
     dead: false,
     monsterDef: def,
     campId,
-    ai: { mode: 'wander', home: { x, y }, wanderRadius: 6, nextThink: 0 },
+    ai: {
+      mode: 'wander',
+      home: { x, y },
+      wanderRadius: 6,
+      nextThink: 0,
+      regionId,
+      // Predators wake at varied hunger so a pack's needs desynchronize.
+      drives: def.predator ? { hunger: 0.25 + Math.random() * 0.45 } : undefined,
+    },
   };
   zone.addEntity(e);
   return e;
@@ -85,8 +100,8 @@ export function spawnNpc(
   return e;
 }
 
-/** A harmless ambient critter (chicken…): wanders, can't fight or be targeted. */
-export function spawnCritter(zone: Zone, variant: string, x: number, y: number): Entity {
+/** A harmless ambient critter (chicken, deer…): wanders, flees, gets eaten. */
+export function spawnCritter(zone: Zone, variant: string, x: number, y: number, regionId?: number): Entity {
   const e: Entity = {
     id: allocEntityId(),
     kind: 'npc',
@@ -101,7 +116,7 @@ export function spawnCritter(zone: Zone, variant: string, x: number, y: number):
     anim: 'idle',
     faction: 'none', // never a combat target
     dead: false,
-    ai: { mode: 'wander', home: { x, y }, wanderRadius: 4, nextThink: 0 },
+    ai: { mode: 'wander', home: { x, y }, wanderRadius: 4, nextThink: 0, regionId },
   };
   zone.addEntity(e);
   return e;

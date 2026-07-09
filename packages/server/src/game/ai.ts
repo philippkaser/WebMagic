@@ -59,27 +59,72 @@ export const GUARD_COMBAT: MonsterDef = {
 
 const MONSTER_LEASH = 26;
 const GUARD_LEASH = 24;
+/** Predator hunger: sated → starving in ~10 minutes of fruitless prowling. */
+const HUNGER_PER_SEC = 1 / 600;
+
+// --- simulation LOD ---------------------------------------------------------
+// The living world only earns its keep near players. Entities beyond earshot
+// of everyone think and move coarsely (~2.5 Hz over accumulated time) instead
+// of every 50 ms — the ecosystem keeps living off-screen at a fraction of the
+// cost, which is what lets a big world and a big player count coexist.
+const LOD_FAR_DIST = 62;
+const LOD_NEAR_DIST = 54; // hysteresis so entities don't flap between tiers
+const FAR_TICK_MS = 380;
+const FAR_MAX_STEP_SEC = 0.6;
+
+function updateLod(e: Entity, watchers: Entity[], now: number): 'near' | 'far' {
+  const ai = e.ai!;
+  if (now >= (ai.lodCheckAt ?? 0)) {
+    ai.lodCheckAt = now + 900 + Math.random() * 300;
+    let best = Infinity;
+    for (const w of watchers) {
+      const dx = w.x - e.x;
+      const dy = w.y - e.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < best) best = d2;
+    }
+    const threshold = ai.lod === 'far' ? LOD_NEAR_DIST : LOD_FAR_DIST;
+    ai.lod = best <= threshold * threshold ? 'near' : 'far';
+  }
+  return ai.lod ?? 'near';
+}
 
 /**
  * Ticks every AI-driven entity in a zone. Target scans run at a staggered
- * ~300ms cadence (ai.nextThink); movement integrates every tick.
+ * ~300ms cadence (ai.nextThink); movement integrates every tick for near
+ * entities and in coarse accumulated steps for far ones.
  */
 export function tickAi(host: AiHost, zone: Zone, dt: number, clock: WorldClock): void {
   const now = host.now();
+  const watchers: Entity[] = [];
+  for (const p of zone.players) {
+    if (!p.entity.dead) watchers.push(p.entity);
+  }
   // Iterate the map directly (no per-tick copy). Removals mid-loop are safe;
   // entities spawned mid-loop may be visited this same tick, which is harmless.
   for (const e of zone.entities.values()) {
-    if (!e.ai || e.dead) continue;
+    const ai = e.ai;
+    if (!ai || e.dead) continue;
     if (e.stunUntil && now < e.stunUntil) {
       e.anim = 'idle';
       continue;
     }
-    if (e.kind === 'monster') tickMonster(host, zone, e, dt, now, clock);
-    else if (e.variant === 'guard') tickGuard(host, zone, e, dt, now, clock);
-    else if (e.variant === 'villager') tickVillager(host, zone, e, dt, now, clock);
-    else if (e.variant === 'caravan') tickCaravan(host, zone, e, dt, now);
-    else if (e.variant === 'caravan-guard') tickCaravanGuard(host, zone, e, dt, now);
-    else if (e.variant === 'chicken' || e.variant === 'deer') tickCritter(zone, e, dt, now);
+
+    let effDt = dt;
+    if (updateLod(e, watchers, now) === 'far') {
+      ai.farAcc = (ai.farAcc ?? 0) + dt;
+      if (now < (ai.farNext ?? 0)) continue;
+      ai.farNext = now + FAR_TICK_MS;
+      effDt = Math.min(ai.farAcc, FAR_MAX_STEP_SEC);
+      ai.farAcc = 0;
+    }
+
+    if (e.kind === 'monster') tickMonster(host, zone, e, effDt, now, clock);
+    else if (e.variant === 'guard') tickGuard(host, zone, e, effDt, now, clock);
+    else if (e.variant === 'villager') tickVillager(host, zone, e, effDt, now, clock);
+    else if (e.variant === 'caravan') tickCaravan(host, zone, e, effDt, now);
+    else if (e.variant === 'caravan-guard') tickCaravanGuard(host, zone, e, effDt, now);
+    else if (e.variant === 'chicken' || e.variant === 'deer') tickCritter(zone, e, effDt, now);
   }
 }
 
@@ -90,6 +135,7 @@ function playersNearby(zone: Zone, e: Entity, range = 14): boolean {
 
 function maybeSay(host: AiHost, zone: Zone, e: Entity, now: number, lines: string[]): void {
   const ai = e.ai!;
+  if (ai.lod === 'far') return; // nobody in earshot — skip the grid query too
   if (ai.sayNext === undefined) ai.sayNext = now + 10_000 + Math.random() * 50_000;
   if (now < ai.sayNext) return;
   ai.sayNext = now + 45_000 + Math.random() * 75_000;
@@ -129,7 +175,14 @@ function moveToward(zone: Zone, e: Entity, tx: number, ty: number, dt: number, n
   const step = Math.min(d, sp * dt);
   e.facing = Math.atan2(dy, dx);
   e.anim = 'move';
-  zone.moveEntity(e, (dx / d) * step, (dy / d) * step);
+  // Coarse LOD ticks can cover several meters at once — substep so collision
+  // never tunnels through a wall thinner than the stride.
+  let remaining = step;
+  while (remaining > 0) {
+    const s = Math.min(remaining, 0.9);
+    zone.moveEntity(e, (dx / d) * s, (dy / d) * s);
+    remaining -= s;
+  }
 }
 
 function scanForTarget(zone: Zone, e: Entity, range: number, targetFaction: 'players' | 'monsters'): Entity | null {
@@ -245,24 +298,35 @@ function validateTarget(zone: Zone, e: Entity, leash: number): Entity | null {
 function tickMonster(host: AiHost, zone: Zone, e: Entity, dt: number, now: number, clock: WorldClock): void {
   const ai = e.ai!;
   const def = e.monsterDef!;
-  let target = validateTarget(zone, e, MONSTER_LEASH);
+  let target = validateTarget(zone, e, ai.roamUntil ? MONSTER_LEASH * 1.6 : MONSTER_LEASH);
+
+  // Hunger climbs while the belly is empty (predators only). Feeding — a
+  // kill — resets it in GameServer.onEntityKilled.
+  if (ai.drives) {
+    ai.drives.hunger = Math.min(1, ai.drives.hunger + dt * HUNGER_PER_SEC);
+  }
 
   // Daily rhythm (overworld camps only): doze near the fire by day, prowl
-  // wide at night. Nocturnal hunters barely react while the sun is up.
+  // wide at night. Nocturnal hunters barely react while the sun is up —
+  // unless starvation overrides the nap.
   let aggro = def.aggroRange * clock.aggroMul;
-  if (e.campId !== undefined) {
+  if (e.campId !== undefined && !ai.roamUntil) {
     ai.wanderRadius = clock.isNight ? 13 : 5;
-    if (def.nocturnal) aggro *= clock.isNight ? 1.25 : 0.35;
+    if (def.nocturnal) {
+      const starving = (ai.drives?.hunger ?? 0) > 0.75;
+      aggro *= clock.isNight || starving ? 1.25 : 0.35;
+    }
   }
 
   if (!target && now >= ai.nextThink) {
     ai.nextThink = now + 250 + Math.random() * 200;
     target = scanForTarget(zone, e, aggro, 'players');
     if (!target) {
-      // No prey worth the name? Predators still hunt critters. Wolves range
-      // wider and give chase eagerly; others only pounce on what's underfoot.
-      const preyRange = e.variant === 'wolf' ? aggro * 1.15 : aggro * 0.6;
-      target = scanForPrey(zone, e, preyRange);
+      // Hunt critters. Sated predators barely bother; hungry ones range far.
+      const appetite = ai.drives ? 0.4 + ai.drives.hunger : 1;
+      const preyRange = (e.variant === 'wolf' ? aggro * 1.15 : aggro * 0.6) * appetite;
+      const hungryEnough = !ai.drives || ai.drives.hunger > 0.3;
+      if (hungryEnough) target = scanForPrey(zone, e, preyRange);
     }
     if (target) {
       ai.targetId = target.id;

@@ -29,6 +29,9 @@ export interface MonsterDef {
   habitat: 'overworld' | 'dungeon';
   /** Nocturnal hunters doze through the day and roam wide at night. */
   nocturnal?: boolean;
+  /** Predators live by hunger: they hunt prey to eat, and starvation drives
+   *  them out of their home region to roam the open world. */
+  predator?: boolean;
   /** On death, spawn smaller monsters (slimes splitting). */
   splitInto?: { id: MonsterId; count: number };
 }
@@ -64,6 +67,7 @@ export const MONSTERS: Record<MonsterId, MonsterDef> = {
     lootChance: 0.2,
     habitat: 'overworld',
     nocturnal: true,
+    predator: true,
   },
   orc: {
     id: 'orc',

@@ -3,6 +3,7 @@ import {
   HouseDef,
   MONSTERS,
   OverworldData,
+  RegionDef,
   Rng,
   TILE_SIZE,
   Vec2,
@@ -34,6 +35,10 @@ const RAID_CHECK_MS = 100_000;
 const RAID_DURATION_MS = 150_000;
 // The event director keeps something happening every ~11–19s.
 const EVENT_INTERVAL_MS = 11_000;
+// Life sim cadences: cheap censuses, not per-tick work.
+const DEER_CHECK_MS = 22_000;
+const WOLF_CHECK_MS = 8_000;
+const EXCURSION_MS = 160_000;
 
 const TRAVELER_TITLES = ['a wandering peddler', 'a hooded pilgrim', 'a road-weary bard', 'a lost traveler', 'a tax collector'];
 const WILD_FLAVOR = [
@@ -92,6 +97,13 @@ export class WorldSim {
   private respawns: PendingRespawn[] = [];
   private corpses: { e: Entity; at: number }[] = [];
   private caravans = new Set<number>();
+  // --- life sim state
+  /** Deer population target per forest region — the prey base wolves depend on. */
+  private deerTargets = new Map<number, number>();
+  private nextDeerCheckAt = 0;
+  /** campId -> excursion end time for wolf packs currently out of their forest. */
+  private roamingPacks = new Map<number, number>();
+  private nextWolfCheckAt = 0;
 
   constructor(zone: Zone, world: OverworldData, seed: number, dayLengthMs = DAY_LENGTH_MS) {
     this.zone = zone;
@@ -198,10 +210,17 @@ export class WorldSim {
       });
     }
 
-    // Wild deer: small herds grazing out in the wilds, well away from towns.
-    // They flee anything that moves — prey for wolves, a chase for players.
-    const herds = this.rng.int(4, 6);
-    for (let h = 0; h < herds; h++) {
+    // Wild deer: herds living in the named forests — the prey base the wolf
+    // packs depend on. When a forest runs out of deer, its wolves go hungry,
+    // and hungry wolves leave the woods. A couple of meadow herds roam the
+    // open country for travellers to startle.
+    const forests = this.world.regions.filter((r) => r.kind === 'forest');
+    for (const forest of forests) {
+      const target = Math.max(3, Math.min(6, Math.round(forest.tiles / 140)));
+      this.deerTargets.set(forest.id, target);
+      for (let i = 0; i < target; i++) this.spawnDeerIn(forest);
+    }
+    for (let h = 0; h < 2; h++) {
       let spot: Vec2 | null = null;
       for (let tries = 0; tries < 20; tries++) {
         const p = tileCenter(
@@ -217,7 +236,7 @@ export class WorldSim {
         break;
       }
       if (!spot) continue;
-      const herdSize = this.rng.int(2, 4);
+      const herdSize = this.rng.int(2, 3);
       for (let i = 0; i < herdSize; i++) {
         const d = this.openSpot(spot.x, spot.y, 6);
         const deer = spawnCritter(this.zone, 'deer', d.x, d.y);
@@ -226,7 +245,7 @@ export class WorldSim {
       }
     }
 
-    // Monster camps
+    // Monster camps (wolf dens carry their forest's regionId)
     for (const camp of this.world.camps) {
       const def = MONSTERS[camp.monster];
       const c = tileCenter(camp.cx, camp.cy);
@@ -236,7 +255,8 @@ export class WorldSim {
           def,
           c.x + this.rng.range(-camp.radius, camp.radius),
           c.y + this.rng.range(-camp.radius, camp.radius),
-          camp.id
+          camp.id,
+          camp.regionId
         );
       }
     }
@@ -300,7 +320,8 @@ export class WorldSim {
         MONSTERS[camp.monster],
         c.x + this.rng.range(-camp.radius, camp.radius),
         c.y + this.rng.range(-camp.radius, camp.radius),
-        camp.id
+        camp.id,
+        camp.regionId
       );
     }
 
@@ -323,7 +344,136 @@ export class WorldSim {
     }
 
     this.tickRaids(host, now);
+    this.tickWolfPacks(host, now);
+    this.tickDeerPopulation(now);
     this.runEvents(host, now);
+  }
+
+  /** A deer materializes near its forest's heart, on open ground. */
+  private spawnDeerIn(forest: RegionDef): void {
+    const c = tileCenter(forest.cx, forest.cy);
+    const reach = forest.radius * TILE_SIZE * 0.7;
+    for (let tries = 0; tries < 16; tries++) {
+      const p = { x: c.x + this.rng.range(-reach, reach), y: c.y + this.rng.range(-reach, reach) };
+      if (this.world.map.blockedAtWorld(p.x, p.y)) continue;
+      const deer = spawnCritter(this.zone, 'deer', p.x, p.y, forest.id);
+      deer.speed = 2.4;
+      if (deer.ai) deer.ai.wanderRadius = 9;
+      return;
+    }
+  }
+
+  /**
+   * Forest ecology: deer herds regrow slowly toward each forest's carrying
+   * capacity. Overhunt a forest — wolves or players — and its pack starves.
+   */
+  private tickDeerPopulation(now: number): void {
+    if (now < this.nextDeerCheckAt) return;
+    this.nextDeerCheckAt = now + DEER_CHECK_MS;
+    if (this.deerTargets.size === 0) return;
+
+    const counts = new Map<number, number>();
+    for (const e of this.zone.entities.values()) {
+      if (e.dead || e.variant !== 'deer' || e.ai?.regionId === undefined) continue;
+      counts.set(e.ai.regionId, (counts.get(e.ai.regionId) ?? 0) + 1);
+    }
+    for (const [regionId, target] of this.deerTargets) {
+      if ((counts.get(regionId) ?? 0) >= target) continue;
+      const forest = this.world.regions.find((r) => r.id === regionId);
+      if (forest) this.spawnDeerIn(forest); // one fawn per census — slow regrowth
+    }
+  }
+
+  /**
+   * The hunger loop that makes wolves feel alive: a pack whose forest has no
+   * prey left starves, leaves the woods together, and prowls toward the
+   * nearest village — chickens, villagers and travellers beware — until fed
+   * or footsore, then slinks home.
+   */
+  private tickWolfPacks(host: WorldSimHost, now: number): void {
+    if (now < this.nextWolfCheckAt) return;
+    this.nextWolfCheckAt = now + WOLF_CHECK_MS;
+
+    // One pass: gather the packs (camp wolves with drives).
+    const packs = new Map<number, Entity[]>();
+    for (const e of this.zone.entities.values()) {
+      if (e.dead || e.kind !== 'monster' || e.campId === undefined || !e.ai?.drives) continue;
+      let pack = packs.get(e.campId);
+      if (!pack) packs.set(e.campId, (pack = []));
+      pack.push(e);
+    }
+
+    for (const [campId, pack] of packs) {
+      const camp = this.world.camps.find((c) => c.id === campId);
+      if (!camp || camp.regionId === undefined) continue;
+      const den = tileCenter(camp.cx, camp.cy);
+      const roamUntil = this.roamingPacks.get(campId);
+
+      if (roamUntil === undefined) {
+        // Home in the forest. Does starvation drive the pack out?
+        const starving = pack.some((w) => (w.ai!.drives!.hunger ?? 0) >= 0.85);
+        if (!starving) continue;
+
+        // March on the nearest village's outskirts (that's where food is).
+        let village = this.world.villages[0];
+        let best = Infinity;
+        for (const v of this.world.villages) {
+          const vc = tileCenter(v.cx, v.cy);
+          const d = dist(den.x, den.y, vc.x, vc.y);
+          if (d < best) {
+            best = d;
+            village = v;
+          }
+        }
+        const vc = tileCenter(village.cx, village.cy);
+        const len = Math.max(1, best);
+        const edge = {
+          x: vc.x + ((den.x - vc.x) / len) * (village.radius * TILE_SIZE + 8),
+          y: vc.y + ((den.y - vc.y) / len) * (village.radius * TILE_SIZE + 8),
+        };
+        const until = now + EXCURSION_MS;
+        for (const wolf of pack) {
+          if ((wolf.ai!.drives!.hunger ?? 0) < 0.55) continue; // the sated stay behind
+          const ai = wolf.ai!;
+          ai.roamUntil = until;
+          ai.home = { x: edge.x + this.rng.range(-4, 4), y: edge.y + this.rng.range(-4, 4) };
+          ai.wanderRadius = 12;
+          ai.mode = 'wander';
+          ai.path = [{ x: edge.x, y: edge.y }];
+          ai.targetId = undefined;
+        }
+        this.roamingPacks.set(campId, until);
+        const forest = this.world.regions.find((r) => r.id === camp.regionId);
+        host.systemNotice(
+          `🐺 Gaunt wolves have come down from ${forest?.name ?? 'the deep woods'} — they were seen loping toward ${village.name}!`
+        );
+        continue;
+      }
+
+      // Out roaming. Head home once fed — or once the excursion runs its course.
+      const fed = pack.every((w) => (w.ai!.drives!.hunger ?? 0) < 0.45);
+      if (!fed && now < roamUntil) continue;
+      for (const wolf of pack) {
+        const ai = wolf.ai!;
+        if (!ai.roamUntil) continue;
+        ai.roamUntil = undefined;
+        ai.home = { x: den.x + this.rng.range(-3, 3), y: den.y + this.rng.range(-3, 3) };
+        ai.wanderRadius = 5;
+        ai.mode = 'return';
+        ai.path = [{ x: den.x, y: den.y }];
+        ai.targetId = undefined;
+      }
+      this.roamingPacks.delete(campId);
+      if (fed) {
+        const forest = this.world.regions.find((r) => r.id === camp.regionId);
+        host.systemNotice(`The wolves, sated, slink back into ${forest?.name ?? 'the woods'}.`);
+      }
+    }
+
+    // A pack wiped out while roaming leaves a stale entry; clear it.
+    for (const [campId, until] of this.roamingPacks) {
+      if (!packs.has(campId) && now > until) this.roamingPacks.delete(campId);
+    }
   }
 
   /**

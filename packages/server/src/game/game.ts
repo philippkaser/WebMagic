@@ -360,6 +360,13 @@ export class GameServer implements AiHost {
       });
     }
 
+    // The kill feeds a hungry predator: hunger resets and wounds knit. This is
+    // what closes the life-sim loop — a wolf that eats goes home to its forest.
+    if (killer?.ai?.drives && !killer.dead && (victim.kind === 'npc' || victim.kind === 'player')) {
+      killer.ai.drives.hunger = 0;
+      killer.hp = Math.min(killer.maxHp, killer.hp + killer.maxHp * 0.4);
+    }
+
     if (victim.kind === 'player') {
       const player = this.playerByEntityId(victim.id);
       if (player) this.onPlayerDied(player, zone);

@@ -36,6 +36,16 @@ export interface VillagerRoutine {
   commute?: Vec2[];
 }
 
+/**
+ * Needs that accumulate over time and are satisfied by actions — the engine
+ * of the life sim. A wolf's day emerges from one number: hunger climbs, it
+ * hunts its forest; the forest runs dry, it leaves for the open world.
+ */
+export interface Drives {
+  /** 0 = sated, 1 = starving. */
+  hunger: number;
+}
+
 export interface AiState {
   mode: AiMode;
   /** Anchor the entity returns to / wanders around. */
@@ -50,6 +60,21 @@ export interface AiState {
   /** Caravan: id of the caravan leader this guard escorts. */
   escortId?: number;
   fleeFromId?: number;
+
+  // --- life sim
+  /** Accumulating needs (predators hunger, prey just graze). */
+  drives?: Drives;
+  /** Named region this creature calls home (wolves: their forest). */
+  regionId?: number;
+  /** While set, this creature is on a hunger excursion away from home. */
+  roamUntil?: number;
+
+  // --- simulation LOD: entities nobody can see think and move coarsely
+  lod?: 'near' | 'far';
+  lodCheckAt?: number;
+  /** Wall-clock time not yet simulated while far (drained on each far tick). */
+  farAcc?: number;
+  farNext?: number;
 
   // --- daily life
   /** Villagers: where they sleep, work and drink. */
